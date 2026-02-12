@@ -1,0 +1,23 @@
+# Neon Postgres connection secret — managed by OpenTofu
+#
+# Populate after `tofu apply`:
+#   make infra-sync-neon
+#
+# Or manually:
+#   kubectl create secret generic neon-connection \
+#     --namespace jadecli \
+#     --from-literal=NEON_DATABASE_URL="postgresql+asyncpg://..."
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: neon-connection
+  namespace: jadecli
+  labels:
+    app.kubernetes.io/part-of: jadecli
+    app.kubernetes.io/managed-by: opentofu
+  annotations:
+    description: "Neon Postgres connection — managed by OpenTofu, synced via make infra-sync-neon"
+type: Opaque
+stringData:
+  NEON_DATABASE_URL: "placeholder — run make infra-sync-neon"

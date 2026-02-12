@@ -1,0 +1,26 @@
+# Langfuse API keys — config-only (no Terraform provider)
+#
+# Populate manually from cloud.langfuse.com > Settings > API Keys:
+#   kubectl create secret generic langfuse-keys \
+#     --namespace jadecli \
+#     --from-literal=LANGFUSE_PUBLIC_KEY="pk-..." \
+#     --from-literal=LANGFUSE_SECRET_KEY="sk-..." \
+#     --from-literal=LANGFUSE_HOST="https://cloud.langfuse.com"
+#
+# Or use: make infra-sync-langfuse (prints instructions)
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: langfuse-keys
+  namespace: jadecli
+  labels:
+    app.kubernetes.io/part-of: jadecli
+    app.kubernetes.io/managed-by: manual
+  annotations:
+    description: "Langfuse API keys — config-only, set manually from cloud.langfuse.com"
+type: Opaque
+stringData:
+  LANGFUSE_PUBLIC_KEY: "placeholder — set manually from cloud.langfuse.com"
+  LANGFUSE_SECRET_KEY: "placeholder — set manually from cloud.langfuse.com"
+  LANGFUSE_HOST: "https://cloud.langfuse.com"

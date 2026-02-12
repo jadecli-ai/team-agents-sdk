@@ -1,0 +1,30 @@
+# NOTE: Aiven Operator v0.35.0 does not include a Dragonfly CRD.
+# The Dragonfly service is managed via:
+#   1. OpenTofu (infra/terraform/) — creates/manages the Aiven service
+#   2. avn CLI — for ad-hoc operations
+#
+# This manifest creates a K8s Secret that mirrors the Aiven connection
+# string. Populate it after `tofu apply` or `avn service get`:
+#
+#   kubectl create secret generic dragonfly-connection \
+#     --namespace jadecli \
+#     --from-literal=DRAGONFLY_URI="rediss://..." \
+#     --from-literal=DRAGONFLY_HOST="..." \
+#     --from-literal=DRAGONFLY_PORT="..."
+#
+# When the Aiven Operator adds Dragonfly CRD support, replace this
+# with a proper aiven.io/v1alpha1 Dragonfly resource.
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dragonfly-connection
+  namespace: jadecli
+  labels:
+    app.kubernetes.io/part-of: jadecli
+    app.kubernetes.io/managed-by: opentofu
+  annotations:
+    description: "Aiven Dragonfly connection — managed by OpenTofu, synced manually or via CI"
+type: Opaque
+stringData:
+  DRAGONFLY_URI: "placeholder — run make infra-sync to populate"

@@ -1,0 +1,30 @@
+# Copy to terraform.tfvars and fill in:
+#   cp terraform.tfvars.example terraform.tfvars
+#
+# ── Aiven (Dragonfly cache) ──────────────────────────────────────────
+# Generate token: Aiven Console > User Info > Tokens > Generate Token
+aiven_api_token = ""
+# aiven_project  = "jadecli-ai"
+# cloud_name     = "google-us-west1"
+# dragonfly_plan = "startup-4"
+
+# ── Neon (Postgres database) ─────────────────────────────────────────
+# Generate key: console.neon.tech > Account > API Keys
+neon_api_key    = ""
+
+# ── Sentry (error tracking) ──────────────────────────────────────────
+# Generate token: sentry.io/settings/auth-tokens/
+sentry_token    = ""
+
+# ── Upstash (serverless Redis) ───────────────────────────────────────
+# Get from: console.upstash.com > Account > API Keys
+upstash_email   = ""
+upstash_api_key = ""
+
+# ── Config-only (set in .env, not Terraform) ─────────────────────────
+# LANGFUSE_PUBLIC_KEY = ""
+# LANGFUSE_SECRET_KEY = ""
+# LANGFUSE_HOST = "https://cloud.langfuse.com"
+# SNYK_TOKEN = ""  (use: snyk auth)
+# PRJ_DRAGONFLY_CLOUD_URL = ""
+# PRJ_REDIS_CLOUD_URL = ""

@@ -1,0 +1,23 @@
+# Sentry DSN secret — managed by OpenTofu
+#
+# Populate after `tofu apply`:
+#   make infra-sync-sentry
+#
+# Or manually:
+#   kubectl create secret generic sentry-dsn \
+#     --namespace jadecli \
+#     --from-literal=SENTRY_DSN="https://...@sentry.io/..."
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sentry-dsn
+  namespace: jadecli
+  labels:
+    app.kubernetes.io/part-of: jadecli
+    app.kubernetes.io/managed-by: opentofu
+  annotations:
+    description: "Sentry DSN — managed by OpenTofu, synced via make infra-sync-sentry"
+type: Opaque
+stringData:
+  SENTRY_DSN: "placeholder — run make infra-sync-sentry"
