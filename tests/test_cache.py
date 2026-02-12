@@ -338,6 +338,96 @@ class TestComposeHooks:
         assert "PreToolUse" in composed
 
 
+# ── Multi-Provider Tests ──────────────────────────────────────────────
+
+
+class TestProviderRegistry:
+    def setup_method(self):
+        from src.cache.providers import reset_providers
+
+        reset_providers()
+
+    def teardown_method(self):
+        from src.cache.providers import reset_providers
+
+        reset_providers()
+
+    @patch.dict(
+        os.environ,
+        {
+            "PRJ_UPSTASH_REDIS_URL": "",
+            "PRJ_REDIS_CLOUD_URL": "",
+            "PRJ_DRAGONFLY_CLOUD_URL": "",
+            "PRJ_AIVEN_DRAGONFLY_URL": "",
+            "PRJ_DRAGONFLY_URL": "",
+        },
+    )
+    def test_no_providers_configured(self):
+        from src.cache.providers import _init_providers, reset_providers
+
+        reset_providers()
+        providers = _init_providers()
+        assert len(providers) == 0
+
+    @patch.dict(
+        os.environ,
+        {"PRJ_UPSTASH_REDIS_URL": "redis://fake:6379", "PRJ_DRAGONFLY_URL": "redis://localhost:6379"},
+    )
+    def test_multiple_providers_configured(self):
+        from src.cache.providers import _init_providers, reset_providers
+
+        reset_providers()
+        providers = _init_providers()
+        names = [p.name for p in providers]
+        assert "upstash" in names
+        assert "local" in names
+
+    def test_get_fastest_healthy_none_when_empty(self):
+        from src.cache.providers import get_fastest_healthy
+
+        assert get_fastest_healthy() is None
+
+    def test_get_all_healthy_empty_when_none(self):
+        from src.cache.providers import get_all_healthy
+
+        assert get_all_healthy() == []
+
+    def test_provider_status_enum(self):
+        from src.cache.providers import ProviderStatus
+
+        assert ProviderStatus.HEALTHY == "healthy"
+        assert ProviderStatus.DOWN == "down"
+        assert ProviderStatus.UNCONFIGURED == "unconfigured"
+
+    def test_provider_health_dataclass(self):
+        from src.cache.providers import ProviderHealth, ProviderStatus
+
+        h = ProviderHealth(name="test", status=ProviderStatus.HEALTHY, latency_ms=1.5)
+        assert h.name == "test"
+        assert h.latency_ms == 1.5
+
+    @patch.dict(os.environ, {"PRJ_UPSTASH_REDIS_URL": "redis://fake:6379"})
+    async def test_health_check_down_provider(self):
+        from src.cache.providers import _init_providers, health_check_all, reset_providers
+
+        reset_providers()
+        _init_providers()
+        results = await health_check_all()
+        assert len(results) == 1
+        assert results[0].status.value == "down"
+
+    def test_get_provider_by_name_not_found(self):
+        from src.cache.providers import get_provider_by_name
+
+        assert get_provider_by_name("nonexistent") is None
+
+    def test_reset_clears_state(self):
+        from src.cache.providers import _init_providers, _providers, reset_providers
+
+        reset_providers()
+        assert len(_providers) == 0
+
+
 # ── Live Redis/Dragonfly Integration Tests ──────────────────────────────
 
 

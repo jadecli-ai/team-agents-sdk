@@ -1,10 +1,12 @@
-"""Async Dragonfly/Redis singleton client.
+"""Async Dragonfly/Redis singleton client with multi-provider support.
 
 Follows src/db/engine.py:get_engine() singleton pattern.
 Handles rediss:// (SSL) automatically via redis-py.
+Uses the fastest healthy provider from the multi-provider registry.
 
 depends_on:
   - src/get_env.py
+  - src/cache/providers.py
 depended_by:
   - src/cache/tool_cache.py
   - src/cache/__init__.py
@@ -30,20 +32,33 @@ _DEFAULT_URL = "redis://localhost:6379/0"
 def get_dragonfly() -> aioredis.Redis:
     """Get or create the async Redis/Dragonfly singleton.
 
-    Uses PRJ_DRAGONFLY_URL from env (supports rediss:// for SSL).
-    Falls back to redis://localhost:6379/0 for local dev.
+    Tries the fastest healthy provider first (if providers are initialized).
+    Falls back to PRJ_DRAGONFLY_URL or localhost.
     """
     global _client
     if _client is None:
+        # Try multi-provider fastest-healthy first
+        try:
+            from src.cache.providers import get_fastest_healthy
+
+            fastest = get_fastest_healthy()
+            if fastest and fastest.client:
+                _client = fastest.client
+                logger.debug("Using provider %s (%.1fms)", fastest.name, fastest.latency_ms)
+                return _client
+        except Exception:
+            pass  # providers not initialized yet, fall through
+
+        # Fallback to single URL
         url = env("PRJ_DRAGONFLY_URL", default=_DEFAULT_URL)
         _client = aioredis.from_url(
             url,
             decode_responses=True,
-            socket_connect_timeout=10,  # cloud SSL handshake
-            socket_timeout=2,  # fast fail on read/write
+            socket_connect_timeout=10,
+            socket_timeout=2,
             retry_on_timeout=False,
         )
-        logger.debug("Dragonfly client created: %s", url.split("@")[-1])
+        logger.debug("Dragonfly client created (fallback): %s", url.split("@")[-1])
     return _client
 
 
