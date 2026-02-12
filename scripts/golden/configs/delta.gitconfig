@@ -1,0 +1,27 @@
+# Git config additions for delta diff pager.
+# Apply with: git config --global include.path ~/.config/delta.gitconfig
+# Or merge into ~/.gitconfig manually.
+#
+# Ref: https://github.com/dandavison/delta
+
+[core]
+    pager = delta
+
+[interactive]
+    diffFilter = delta --color-only
+
+[delta]
+    navigate = true
+    side-by-side = true
+    line-numbers = true
+    syntax-theme = Dracula
+    file-style = bold yellow ul
+    hunk-header-style = line-number syntax
+    minus-style = syntax "#3f0001"
+    plus-style = syntax "#003800"
+
+[merge]
+    conflictstyle = diff3
+
+[diff]
+    colorMoved = default

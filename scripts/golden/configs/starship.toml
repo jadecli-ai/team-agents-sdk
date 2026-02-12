@@ -1,0 +1,76 @@
+# Starship prompt config for golden WSL2 distro.
+# Ref: https://starship.rs/config/
+#
+# Design: compact, informative, fast. Shows git status, Python venv,
+# Node version, Docker context, and command duration.
+
+# Prompt format
+format = """
+$username$hostname$directory$git_branch$git_status$python$nodejs$docker_context$cmd_duration$character"""
+
+# Don't add a blank line before the prompt
+add_newline = false
+
+# Timeout for commands (ms)
+command_timeout = 1000
+
+[username]
+show_always = false
+format = "[$user]($style)@"
+style_user = "bold green"
+
+[hostname]
+ssh_only = true
+format = "[$hostname]($style):"
+style = "bold blue"
+
+[directory]
+truncation_length = 3
+truncate_to_repo = true
+format = "[$path]($style)[$read_only]($read_only_style) "
+style = "bold cyan"
+
+[git_branch]
+format = "[$symbol$branch(:$remote_branch)]($style) "
+symbol = " "
+style = "bold purple"
+truncation_length = 24
+
+[git_status]
+format = '([$all_status$ahead_behind]($style) )'
+style = "bold red"
+conflicted = "="
+ahead = "↑${count}"
+behind = "↓${count}"
+diverged = "↕↑${ahead_count}↓${behind_count}"
+untracked = "?${count}"
+stashed = "$${count}"
+modified = "!${count}"
+staged = "+${count}"
+deleted = "✘${count}"
+
+[python]
+format = '[${symbol}${pyenv_prefix}(${version} )(\($virtualenv\) )]($style)'
+symbol = " "
+style = "yellow"
+
+[nodejs]
+format = "[$symbol($version )]($style)"
+symbol = " "
+style = "green"
+detect_files = ["package.json", ".node-version"]
+
+[docker_context]
+format = "[$symbol$context]($style) "
+symbol = " "
+style = "blue"
+only_with_files = true
+
+[cmd_duration]
+min_time = 2_000
+format = "[$duration]($style) "
+style = "bold yellow"
+
+[character]
+success_symbol = "[>](bold green)"
+error_symbol = "[>](bold red)"

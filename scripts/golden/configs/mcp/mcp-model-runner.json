@@ -8,6 +8,10 @@
         "/home/org-jadecli/.claude",
         "/home/org-jadecli/projects"
       ]
+    },
+    "git": {
+      "command": "uvx",
+      "args": ["mcp-server-git", "--repository", "/home/org-jadecli/projects"]
     }
   }
 }

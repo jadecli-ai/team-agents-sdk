@@ -40,7 +40,7 @@ while [[ $# -gt 0 ]]; do
         --help|-h)
             echo "Usage: distro-health-check [--category NAME] [--json] [--verbose] [--quiet]"
             echo ""
-            echo "Categories: system, network, gpu, tools, mcp, services, docker, tracing, cache, tailscale"
+            echo "Categories: system, network, gpu, tools, cli-tools, mcp, services, docker, tracing, cache, tailscale"
             exit 0
             ;;
         *) echo "Unknown option: $1"; exit 1 ;;
@@ -267,6 +267,116 @@ check_tools() {
     fi
 }
 
+# ── Category: cli-tools ──────────────────────────────────────────────
+check_cli_tools() {
+    category "cli-tools"
+
+    # Rust toolchain
+    if command -v rustc &>/dev/null; then
+        local rv
+        rv=$(rustc --version 2>/dev/null | awk '{print $2}')
+        ok "rustc ($rv)"
+    else
+        warn "rustc" "not installed (run install-cli-tools.sh)"
+    fi
+
+    if command -v cargo &>/dev/null; then
+        ok "cargo"
+    else
+        warn "cargo" "not installed"
+    fi
+
+    # apt-installed tools (bat=batcat, fd=fdfind on Ubuntu)
+    local -a apt_tools=("batcat:bat" "fdfind:fd" "fzf:fzf" "htop:htop" "direnv:direnv" "duf:duf" "nvim:neovim")
+    for entry in "${apt_tools[@]}"; do
+        local cmd="${entry%%:*}"
+        local name="${entry##*:}"
+        if command -v "$cmd" &>/dev/null; then
+            ok "$name"
+        else
+            warn "$name" "not installed"
+        fi
+    done
+
+    # cargo-installed tools
+    local -a cargo_tools=("eza:eza" "zoxide:zoxide" "sd:sd" "dust:dust" "tokei:tokei" "procs:procs" "btm:bottom" "hyperfine:hyperfine" "xh:xh" "tldr:tealdeer" "delta:delta")
+    for entry in "${cargo_tools[@]}"; do
+        local cmd="${entry%%:*}"
+        local name="${entry##*:}"
+        if command -v "$cmd" &>/dev/null; then
+            ok "$name"
+        else
+            warn "$name" "not installed (cargo install $name)"
+        fi
+    done
+
+    # Binary-installed tools
+    if command -v lazygit &>/dev/null; then
+        ok "lazygit"
+    else
+        warn "lazygit" "not installed"
+    fi
+
+    if command -v lazydocker &>/dev/null; then
+        ok "lazydocker"
+    else
+        warn "lazydocker" "not installed"
+    fi
+
+    # Starship prompt
+    if command -v starship &>/dev/null; then
+        ok "starship"
+    else
+        warn "starship" "not installed"
+    fi
+
+    # Python/Node tools
+    if command -v pipx &>/dev/null; then
+        ok "pipx"
+    else
+        warn "pipx" "not installed"
+    fi
+
+    if command -v yq &>/dev/null; then
+        ok "yq"
+    else
+        warn "yq" "not installed"
+    fi
+
+    if command -v http &>/dev/null; then
+        ok "httpie"
+    else
+        warn "httpie" "not installed"
+    fi
+
+    if command -v pre-commit &>/dev/null; then
+        ok "pre-commit"
+    else
+        warn "pre-commit" "not installed"
+    fi
+
+    # Shell integration markers
+    local zshrc="$HOME/.zshrc"
+    if [ -f "$zshrc" ] && grep -qF "Modern CLI aliases (golden)" "$zshrc" 2>/dev/null; then
+        ok "shell aliases configured"
+    else
+        warn "shell aliases" "not configured in .zshrc"
+    fi
+
+    if [ -f "$HOME/.config/starship.toml" ]; then
+        ok "starship.toml config"
+    else
+        warn "starship.toml" "not found at ~/.config/starship.toml"
+    fi
+
+    local gitconfig="$HOME/.gitconfig"
+    if [ -f "$gitconfig" ] && grep -qF "[delta]" "$gitconfig" 2>/dev/null; then
+        ok "delta git pager configured"
+    else
+        warn "delta pager" "not configured in .gitconfig"
+    fi
+}
+
 # ── Category: mcp ────────────────────────────────────────────────────
 check_mcp() {
     category "mcp"
@@ -476,29 +586,35 @@ check_cache() {
         skip "PRJ_DRAGONFLY_URL in .env" ".env not found"
     fi
 
+    # Use project venv Python if available, else system python3
+    local py="python3"
+    if [[ -n "$proj_root" && -x "$proj_root/.venv/bin/python" ]]; then
+        py="$proj_root/.venv/bin/python"
+    fi
+
     # Python redis package importable
-    if python3 -c "import redis" 2>/dev/null; then
+    if "$py" -c "import redis" 2>/dev/null; then
         ok "python redis package"
     else
         fail "python redis package" "not importable (pip install redis)"
     fi
 
     # Cache module importable
-    if (cd "$proj_root" 2>/dev/null && python3 -c "from src.cache import check_cache" 2>/dev/null); then
+    if (cd "$proj_root" 2>/dev/null && "$py" -c "from src.cache import check_cache" 2>/dev/null); then
         ok "src.cache module"
     else
         fail "src.cache module" "cannot import check_cache from src.cache"
     fi
 
     # Context hooks importable
-    if (cd "$proj_root" 2>/dev/null && python3 -c "from src.hooks.context_manager import get_context_hooks" 2>/dev/null); then
+    if (cd "$proj_root" 2>/dev/null && "$py" -c "from src.hooks.context_manager import get_context_hooks" 2>/dev/null); then
         ok "context_manager hooks"
     else
         fail "context_manager hooks" "cannot import get_context_hooks"
     fi
 
     # Tool chain hooks importable
-    if (cd "$proj_root" 2>/dev/null && python3 -c "from src.hooks.tool_chain import get_chain_hooks" 2>/dev/null); then
+    if (cd "$proj_root" 2>/dev/null && "$py" -c "from src.hooks.tool_chain import get_chain_hooks" 2>/dev/null); then
         ok "tool_chain hooks"
     else
         fail "tool_chain hooks" "cannot import get_chain_hooks"
@@ -553,6 +669,7 @@ should_run "system"    && check_system
 should_run "network"   && check_network
 should_run "gpu"       && check_gpu
 should_run "tools"     && check_tools
+should_run "cli-tools" && check_cli_tools
 should_run "mcp"       && check_mcp
 should_run "services"  && check_services
 should_run "docker"    && check_docker
@@ -589,9 +706,8 @@ fi
 
 # Log failures to file
 if [[ $FAIL_COUNT -gt 0 ]]; then
-    local log_dir="/var/log"
-    if [ -w "$log_dir" ]; then
-        echo "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"failures\":$FAIL_COUNT}" >> "$log_dir/distro-health.log"
+    if [ -w "/var/log" ]; then
+        echo "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"failures\":$FAIL_COUNT}" >> "/var/log/distro-health.log"
     fi
 fi
 

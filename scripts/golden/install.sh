@@ -12,6 +12,7 @@
 #   4: Tailscale install
 #   5: Install bin scripts + health check
 #   6: Install MCP configs
+#   7: Modern CLI tools (Rust, cargo, binary releases, shell integration)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -96,6 +97,19 @@ if [[ "$PHASE" == "all" || "$PHASE" == "6" ]]; then
     mkdir -p /usr/local/share/golden/configs/mcp
     cp "$SCRIPT_DIR/configs/mcp/"*.json /usr/local/share/golden/configs/mcp/
     echo -e "  ${GREEN}MCP configs installed to /usr/local/share/golden/configs/mcp/${NC}"
+fi
+
+# ── Phase 7: CLI tools ──────────────────────────────────────────────
+run_phase 7 "Modern CLI tools"
+if [[ "$PHASE" == "all" || "$PHASE" == "7" ]]; then
+    # Run as the regular user, not root (cargo install needs user home)
+    REAL_USER="${SUDO_USER:-org-jadecli}"
+    if [[ "$(whoami)" == "root" && -n "$REAL_USER" ]]; then
+        su - "$REAL_USER" -c "bash $SCRIPT_DIR/install-cli-tools.sh"
+    else
+        bash "$SCRIPT_DIR/install-cli-tools.sh"
+    fi
+    echo -e "  ${GREEN}CLI tools installed${NC}"
 fi
 
 # ── Done ─────────────────────────────────────────────────────────────

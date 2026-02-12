@@ -15,9 +15,10 @@
 #   7. Prompts for gh auth login
 #   8. Clones org repos
 #   9. Prompts for Tailscale up
-#  10. Verifies Docker Desktop integration
-#  11. Bootstraps team-agents-sdk (.env, make install, make test)
-#  12. Runs distro-health-check
+#  10. Installs modern CLI tools (Rust, cargo, shell integration)
+#  11. Verifies Docker Desktop integration
+#  12. Bootstraps team-agents-sdk (.env, make install, make test)
+#  13. Runs distro-health-check
 set -euo pipefail
 
 BOLD='\033[1m'
@@ -168,8 +169,29 @@ else
     echo -e "  ${YELLOW}Tailscale not installed${NC}"
 fi
 
-# ── 10. Docker Desktop ──────────────────────────────────────────────
-echo -e "${BOLD}[10/12] Docker Desktop integration${NC}"
+# ── 10. CLI tools (Rust, cargo, modern CLI) ────────────────────────
+echo -e "${BOLD}[10/13] Modern CLI tools${NC}"
+if command -v install-cli-tools.sh &>/dev/null; then
+    TOOLS_SCRIPT="install-cli-tools.sh"
+elif [ -f "$HOME/projects/jadecli-ai/team-agents-sdk/scripts/golden/install-cli-tools.sh" ]; then
+    TOOLS_SCRIPT="$HOME/projects/jadecli-ai/team-agents-sdk/scripts/golden/install-cli-tools.sh"
+else
+    TOOLS_SCRIPT=""
+fi
+
+if [[ -n "$TOOLS_SCRIPT" ]]; then
+    read -rp "  Install modern CLI tools (Rust, cargo tools, shell integration)? [Y/n] " do_cli
+    if [[ "${do_cli:-Y}" =~ ^[Yy]$ ]]; then
+        bash "$TOOLS_SCRIPT"
+    else
+        echo "  Skipped — run '$TOOLS_SCRIPT' later"
+    fi
+else
+    echo -e "  ${YELLOW}install-cli-tools.sh not found${NC}"
+fi
+
+# ── 11. Docker Desktop ──────────────────────────────────────────────
+echo -e "${BOLD}[11/13] Docker Desktop integration${NC}"
 if docker ps &>/dev/null; then
     echo -e "  ${GREEN}Docker available${NC}"
     if docker model --help &>/dev/null; then
@@ -181,8 +203,8 @@ else
     echo -e "  ${YELLOW}Docker not available — enable WSL integration in Docker Desktop Settings > Resources > WSL Integration${NC}"
 fi
 
-# ── 11. Bootstrap team-agents-sdk ───────────────────────────────────
-echo -e "${BOLD}[11/12] Bootstrap team-agents-sdk${NC}"
+# ── 12. Bootstrap team-agents-sdk ───────────────────────────────────
+echo -e "${BOLD}[12/13] Bootstrap team-agents-sdk${NC}"
 SDK_DIR="$HOME/projects/jadecli-ai/team-agents-sdk"
 if [ -d "$SDK_DIR" ]; then
     echo "  Found SDK at $SDK_DIR"
@@ -225,9 +247,9 @@ else
     echo "  SDK not found — run 'gh-clone-orgs' first"
 fi
 
-# ── 12. Health check ────────────────────────────────────────────────
+# ── 13. Health check ────────────────────────────────────────────────
 echo ""
-echo -e "${BOLD}[12/12] Running health check${NC}"
+echo -e "${BOLD}[13/13] Running health check${NC}"
 if command -v distro-health-check &>/dev/null; then
     distro-health-check || true
 else

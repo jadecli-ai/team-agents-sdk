@@ -84,6 +84,22 @@ clean "MLflow sync watermark" "$USER_HOME/.mlflow/sync_watermark"
 clean "MLflow local DB" "$USER_HOME/.mlflow/mlruns.db"
 clean "benchmark baseline" "$USER_HOME/.distro-baseline.json"
 
+# Backup files (Claude Code)
+clean "claude backup files" "$USER_HOME"/.claude.json.backup.*
+
+# Empty placeholder directories
+clean "empty azure dir" "$USER_HOME/.azure"
+clean "empty aws dir" "$USER_HOME/.aws"
+clean "empty dotnet dir" "$USER_HOME/.dotnet"
+clean "empty copilot dir" "$USER_HOME/.copilot"
+clean "vscode remote containers" "$USER_HOME/.vscode-remote-containers"
+
+# Stale completion caches (zsh)
+clean "zsh completion caches" "$USER_HOME"/.zcompdump*
+
+# Cargo registry cache (recoverable — rebuilds on next install)
+clean "cargo registry cache" "$USER_HOME/.cargo/registry/cache"
+
 # Remove clone-specific secrets (neon.env has real creds)
 clean "neon.env (creds)" /etc/mlflow/neon.env
 
