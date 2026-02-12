@@ -44,9 +44,7 @@ class TestCrudGet:
     async def test_get_found(self, mock_factory, crud, mock_session):
         task_id = uuid4()
         mock_session.execute.return_value = MagicMock(
-            mappings=lambda: MagicMock(
-                first=lambda: {"id": task_id, "title": "found"}
-            )
+            mappings=lambda: MagicMock(first=lambda: {"id": task_id, "title": "found"})
         )
         mock_factory.return_value = MagicMock(return_value=mock_session)
 
@@ -86,9 +84,7 @@ class TestCrudUpdate:
     async def test_update_returns_updated(self, mock_factory, crud, mock_session):
         task_id = uuid4()
         mock_session.execute.return_value = MagicMock(
-            mappings=lambda: MagicMock(
-                first=lambda: {"id": task_id, "status": "completed"}
-            )
+            mappings=lambda: MagicMock(first=lambda: {"id": task_id, "status": "completed"})
         )
         mock_factory.return_value = MagicMock(return_value=mock_session)
 
@@ -120,9 +116,7 @@ class TestCrudIncrement:
     async def test_increment(self, mock_factory, crud, mock_session):
         task_id = uuid4()
         mock_session.execute.return_value = MagicMock(
-            mappings=lambda: MagicMock(
-                first=lambda: {"id": task_id, "actual_cost_usd": 0.15}
-            )
+            mappings=lambda: MagicMock(first=lambda: {"id": task_id, "actual_cost_usd": 0.15})
         )
         mock_factory.return_value = MagicMock(return_value=mock_session)
 

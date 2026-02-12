@@ -6,13 +6,11 @@ These tests require PRJ_NEON_DATABASE_URL to be set. Skip if not available.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
 
-from src.models import Task, TaskStatus
 
 # Skip entire module if no database URL
 pytestmark = pytest.mark.skipif(
@@ -47,10 +45,10 @@ class TestDatabaseRoundTrip:
         await session.commit()
 
         row = (
-            await session.execute(
-                sa.select(tasks).where(tasks.c.id == task_id)
-            )
-        ).mappings().first()
+            (await session.execute(sa.select(tasks).where(tasks.c.id == task_id)))
+            .mappings()
+            .first()
+        )
 
         assert row is not None
         assert row["title"] == "Test task"
@@ -81,12 +79,14 @@ class TestDatabaseRoundTrip:
         await session.commit()
 
         row = (
-            await session.execute(
-                sa.select(task_dependencies).where(
-                    task_dependencies.c.blocked_task_id == b_id
+            (
+                await session.execute(
+                    sa.select(task_dependencies).where(task_dependencies.c.blocked_task_id == b_id)
                 )
             )
-        ).mappings().first()
+            .mappings()
+            .first()
+        )
 
         assert row is not None
         assert row["blocker_task_id"] == a_id

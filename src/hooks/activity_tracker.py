@@ -90,7 +90,9 @@ def get_activity_hooks(
         Dict with PreToolUse, PostToolUse, SubagentStop, Stop callbacks.
     """
 
-    async def on_pre_tool_use(tool_name: str, tool_input: dict, *, session_id: str | None = None, **_kwargs) -> None:
+    async def on_pre_tool_use(
+        tool_name: str, tool_input: dict, *, session_id: str | None = None, **_kwargs
+    ) -> None:
         _tool_start_times[(session_id, tool_name)] = time.monotonic()
         await _log_event(
             task_id=task_id,
@@ -124,7 +126,9 @@ def get_activity_hooks(
             duration_ms=duration_ms,
         )
 
-    async def on_subagent_stop(*, session_id: str | None = None, num_turns: int | None = None, **_kwargs) -> None:
+    async def on_subagent_stop(
+        *, session_id: str | None = None, num_turns: int | None = None, **_kwargs
+    ) -> None:
         await _log_event(
             task_id=task_id,
             agent_name=agent_name,
@@ -134,7 +138,13 @@ def get_activity_hooks(
             num_turns=num_turns,
         )
 
-    async def on_stop(*, session_id: str | None = None, num_turns: int | None = None, cost_usd: float | None = None, **_kwargs) -> None:
+    async def on_stop(
+        *,
+        session_id: str | None = None,
+        num_turns: int | None = None,
+        cost_usd: float | None = None,
+        **_kwargs,
+    ) -> None:
         await _log_event(
             task_id=task_id,
             agent_name=agent_name,

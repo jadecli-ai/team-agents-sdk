@@ -66,13 +66,13 @@ class Crud:
         """Get a single row by primary key."""
         factory = get_session_factory()
         async with factory() as session:
-            result = await session.execute(
-                sa.select(self.table).where(self.table.c.id == id)
-            )
+            result = await session.execute(sa.select(self.table).where(self.table.c.id == id))
             row = result.mappings().first()
             return dict(row) if row else None
 
-    async def find(self, *, limit: int = 100, order_by: str = "created_at", **filters: Any) -> list[dict]:
+    async def find(
+        self, *, limit: int = 100, order_by: str = "created_at", **filters: Any
+    ) -> list[dict]:
         """Find rows matching column filters.
 
         Args:
@@ -118,9 +118,7 @@ class Crud:
         """Delete a row by primary key. Returns True if deleted."""
         factory = get_session_factory()
         async with factory() as session:
-            result = await session.execute(
-                sa.delete(self.table).where(self.table.c.id == id)
-            )
+            result = await session.execute(sa.delete(self.table).where(self.table.c.id == id))
             await session.commit()
             return result.rowcount > 0
 
@@ -155,7 +153,5 @@ class Crud:
         """Check if a row exists."""
         factory = get_session_factory()
         async with factory() as session:
-            result = await session.execute(
-                sa.select(sa.literal(1)).where(self.table.c.id == id)
-            )
+            result = await session.execute(sa.select(sa.literal(1)).where(self.table.c.id == id))
             return result.first() is not None

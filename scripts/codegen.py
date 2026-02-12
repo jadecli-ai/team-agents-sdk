@@ -9,9 +9,7 @@ With --check: validates YAML and prints what would be generated, without writing
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -59,14 +57,14 @@ def parse_type(col_type: str) -> tuple[str, int | None]:
 def generate_drizzle_schema(tables: list[dict], enums: dict) -> str:
     """Generate Drizzle pgTable definitions."""
     lines = [
-        '// Auto-generated from semantic/*.yaml — do not edit manually',
+        "// Auto-generated from semantic/*.yaml — do not edit manually",
         'import { pgTable, uuid, varchar, text, real, integer, timestamp } from "drizzle-orm/pg-core";',
         "",
     ]
 
     for table in tables:
         name = table["name"]
-        lines.append(f"export const {name} = pgTable(\"{name}\", {{")
+        lines.append(f'export const {name} = pgTable("{name}", {{')
 
         for col_name, col_def in table["columns"].items():
             base_type, length = parse_type(col_def["type"])

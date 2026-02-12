@@ -15,12 +15,16 @@ async def main():
 
     async with factory() as session:
         rows = (
-            await session.execute(
-                sa.select(tasks.c.id, tasks.c.title, tasks.c.status).where(
-                    tasks.c.status.in_(["pending", "in_progress", "blocked"])
+            (
+                await session.execute(
+                    sa.select(tasks.c.id, tasks.c.title, tasks.c.status).where(
+                        tasks.c.status.in_(["pending", "in_progress", "blocked"])
+                    )
                 )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
 
     print(f"Found {len(rows)} tasks to sync")
 

@@ -106,7 +106,7 @@ async def seed():
 
         await session.commit()
 
-    print(f"Seeded 3 tasks, 1 subtask, 3 activity events")
+    print("Seeded 3 tasks, 1 subtask, 3 activity events")
     await dispose_engine()
 
 
