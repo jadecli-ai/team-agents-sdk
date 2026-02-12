@@ -1,0 +1,26 @@
+# Shared services for all WSL2 clones.
+# Redis binds to localhost:6379 — accessible from every clone via Docker Desktop.
+#
+# Usage:
+#   docker compose up -d        # Start services
+#   docker compose ps           # Check status
+#   docker compose down         # Stop services
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis-mcp
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  redis-data:

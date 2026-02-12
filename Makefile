@@ -417,6 +417,12 @@ golden-systemd: ## Install and enable mlflow-sync timer
 	sudo systemctl enable --now mlflow-sync.timer
 	@echo "✓ mlflow-sync timer enabled"
 
+golden-cli-tools: ## Install modern CLI tools (Rust, cargo, starship, etc.)
+	bash $(GOLDEN_DIR)/install-cli-tools.sh
+
+golden-cli-check: ## Check which CLI tools are installed
+	bash $(GOLDEN_DIR)/install-cli-tools.sh --check
+
 golden-health: ## Run distro health check (55+ checks)
 	@if command -v distro-health-check &>/dev/null; then \
 		distro-health-check; \
@@ -516,7 +522,100 @@ async def run(): \
     print(f'Flushed {n} cache keys'); \
 asyncio.run(run())" 2>/dev/null || echo "  Dragonfly not available"
 
+cache-health: ## Health check all cache providers (Upstash, Redis Cloud, Dragonfly Cloud, Aiven, local)
+	@$(PY) -c "\
+import asyncio; \
+from src.cache.providers import health_check_all, _init_providers, PROVIDERS; \
+from src.get_env import env; \
+async def run(): \
+    print('=== Cache Provider Health ==='); \
+    print(''); \
+    providers = _init_providers(); \
+    if not providers: \
+        print('  No providers configured. Set URLs in .env:'); \
+        for p in PROVIDERS: print(f'    {p[\"env_key\"]}'); \
+        return; \
+    results = await health_check_all(); \
+    for h in results: \
+        if h.status.value == 'healthy': \
+            print(f'  ✓ {h.name:20s} {h.status.value:10s} {h.latency_ms:7.1f}ms  {h.server_info}'); \
+        elif h.status.value == 'degraded': \
+            print(f'  ⚠ {h.name:20s} {h.status.value:10s} {h.latency_ms:7.1f}ms  {h.server_info}'); \
+        else: \
+            print(f'  ✗ {h.name:20s} {h.status.value:10s} {h.latency_ms:7.1f}ms  {h.error}'); \
+    healthy = [h for h in results if h.status.value in ('healthy', 'degraded')]; \
+    print(''); \
+    print(f'  {len(healthy)}/{len(results)} providers healthy'); \
+    if healthy: \
+        fastest = min(healthy, key=lambda h: h.latency_ms); \
+        print(f'  Fastest: {fastest.name} ({fastest.latency_ms:.1f}ms)'); \
+asyncio.run(run())"
+
+# ── Infrastructure (OpenTofu + Aiven + K8s) ────────────────────────
+
+infra-init: ## Initialize OpenTofu providers
+	cd infra/terraform && tofu init
+
+infra-plan: ## Preview infrastructure changes
+	cd infra/terraform && tofu plan
+
+infra-apply: ## Apply infrastructure changes (creates/updates Aiven services)
+	cd infra/terraform && tofu apply
+
+infra-status: ## Show Aiven service status via CLI
+	@avn service list --project jadecli-ai 2>/dev/null || echo "Run: avn user login"
+
+infra-uri: ## Get Dragonfly connection URI from Aiven
+	@avn service get jadecli-cache --project jadecli-ai --json 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('service_uri','NOT READY'))" || echo "Service not found"
+
+infra-sync: ## Sync Aiven connection string to K8s secret
+	@URI=$$(avn service get jadecli-cache --project jadecli-ai --json 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print(d['service_uri'])") && \
+	kubectl create secret generic dragonfly-connection \
+		--namespace jadecli \
+		--from-literal=DRAGONFLY_URI="$$URI" \
+		--dry-run=client -o yaml | kubectl apply -f -
+
+infra-sync-all: ## Sync ALL terraform outputs to K8s secrets
+	$(MAKE) infra-sync infra-sync-neon infra-sync-sentry infra-sync-langfuse infra-sync-upstash
+
+infra-sync-neon: ## Sync Neon connection to K8s secret
+	@URI=$$(cd infra/terraform && tofu output -raw neon_connection_uri 2>/dev/null) && \
+	kubectl create secret generic neon-connection --namespace jadecli \
+		--from-literal=NEON_DATABASE_URL="$$URI" --dry-run=client -o yaml | kubectl apply -f -
+
+infra-sync-sentry: ## Sync Sentry DSN to K8s secret
+	@DSN=$$(cd infra/terraform && tofu output -raw sentry_dsn 2>/dev/null) && \
+	kubectl create secret generic sentry-dsn --namespace jadecli \
+		--from-literal=SENTRY_DSN="$$DSN" --dry-run=client -o yaml | kubectl apply -f -
+
+infra-sync-langfuse: ## Sync Langfuse keys to K8s secret (manual — no TF provider)
+	@echo "Langfuse keys are config-only. Set manually:"
+	@echo "  kubectl create secret generic langfuse-keys --namespace jadecli \\"
+	@echo "    --from-literal=LANGFUSE_PUBLIC_KEY=... \\"
+	@echo "    --from-literal=LANGFUSE_SECRET_KEY=... \\"
+	@echo "    --from-literal=LANGFUSE_HOST=https://cloud.langfuse.com"
+
+infra-sync-upstash: ## Sync Upstash connection to K8s secret
+	@URI=$$(cd infra/terraform && tofu output -raw upstash_endpoint 2>/dev/null) && \
+	kubectl create secret generic upstash-connection --namespace jadecli \
+		--from-literal=PRJ_UPSTASH_REDIS_URL="$$URI" --dry-run=client -o yaml | kubectl apply -f -
+
+infra-import: ## Import existing resources into Terraform state
+	cd infra/terraform && tofu import aiven_dragonfly.cache jadecli-ai/jadecli-cache
+	cd infra/terraform && tofu import neon_project.main damp-star-47314338
+
+k8s-status: ## Show kind cluster and namespace status
+	@kubectl cluster-info --context kind-jadecli 2>/dev/null || echo "No cluster (run: kind create cluster --name jadecli)"
+	@echo "" && kubectl get all -n jadecli 2>/dev/null || true
+	@echo "" && kubectl get secrets -n jadecli 2>/dev/null || true
+
 # ── CI Status ────────────────────────────────────────────────────
+
+secrets-sync: ## Sync .env secrets to Bitwarden Secrets Manager
+	bash scripts/secrets-setup.sh --sync
+
+secrets-check: ## Check which secrets are stored in Bitwarden
+	bash scripts/secrets-setup.sh --check
 
 ci-status: ## Show status of free-tier CI integrations
 	@echo "=== CI Integration Status ==="

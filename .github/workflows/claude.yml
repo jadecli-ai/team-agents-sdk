@@ -73,6 +73,54 @@ jobs:
             - Python async best practices
             - TypeScript/Drizzle schema alignment with semantic/*.yaml
 
+  # ── Security Review ────────────────────────────────────────────────
+  security-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Security Review (OAuth)
+        if: ${{ secrets.CLAUDE_ACCESS_TOKEN != '' }}
+        uses: grll/claude-code-action@beta
+        with:
+          use_oauth: true
+          claude_access_token: ${{ secrets.CLAUDE_ACCESS_TOKEN }}
+          claude_refresh_token: ${{ secrets.CLAUDE_REFRESH_TOKEN }}
+          claude_expires_at: ${{ secrets.CLAUDE_EXPIRES_AT }}
+          secrets_admin_pat: ${{ secrets.SECRETS_ADMIN_PAT }}
+          timeout_minutes: "15"
+          prompt: |
+            Perform a security review of this PR. Focus exclusively on:
+            - Leaked secrets, API keys, tokens in code or config
+            - SQL injection, command injection, XSS vulnerabilities
+            - Insecure deserialization or eval() usage
+            - Path traversal or file access vulnerabilities
+            - Missing input validation at system boundaries
+            - Dependency vulnerabilities (check for known CVEs)
+            Only report genuine security concerns with HIGH confidence.
+            Do not comment on code style or non-security issues.
+
+      - name: Security Review (API Key)
+        if: ${{ secrets.CLAUDE_ACCESS_TOKEN == '' && secrets.ANTHROPIC_API_KEY != '' }}
+        uses: anthropics/claude-code-action@v1
+        with:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Perform a security review of this PR. Focus exclusively on:
+            - Leaked secrets, API keys, tokens in code or config
+            - SQL injection, command injection, XSS vulnerabilities
+            - Insecure deserialization or eval() usage
+            - Path traversal or file access vulnerabilities
+            - Missing input validation at system boundaries
+            - Dependency vulnerabilities (check for known CVEs)
+            Only report genuine security concerns with HIGH confidence.
+            Do not comment on code style or non-security issues.
+
   # ── @claude Mention Response ────────────────────────────────────────
   respond:
     if: >
