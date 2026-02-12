@@ -11,6 +11,9 @@ semver: major
 
 from __future__ import annotations
 
+import ssl
+from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
+
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -20,11 +23,18 @@ _engine: AsyncEngine | None = None
 
 
 def _normalize_url(url: str) -> str:
-    """Ensure URL uses asyncpg driver prefix."""
+    """Ensure URL uses asyncpg driver prefix and strip sslmode (asyncpg incompatible)."""
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
     elif url.startswith("postgresql://") and "+asyncpg" not in url:
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    # Strip sslmode/channel_binding — asyncpg doesn't support them as URL params
+    parts = urlsplit(url)
+    if parts.query:
+        params = parse_qs(parts.query)
+        params.pop("sslmode", None)
+        params.pop("channel_binding", None)
+        url = urlunsplit(parts._replace(query=urlencode(params, doseq=True)))
     return url
 
 
@@ -33,12 +43,15 @@ def get_engine() -> AsyncEngine:
     global _engine
     if _engine is None:
         url = _normalize_url(env("PRJ_NEON_DATABASE_URL"))
+        # Neon requires SSL — create a default SSL context for asyncpg
+        ssl_context = ssl.create_default_context()
         _engine = create_async_engine(
             url,
             pool_pre_ping=True,
             pool_recycle=600,
             pool_size=5,
             max_overflow=2,
+            connect_args={"ssl": ssl_context},
         )
     return _engine
 
