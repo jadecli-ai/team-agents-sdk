@@ -284,6 +284,43 @@ When an MLflow trace reveals a bug or anti-pattern, add it here so it's never re
 | `make sync-github` | Sync tasks → GitHub Issues + Project |
 | `make clean` | Remove build artifacts |
 
+## Permission Settings
+
+Two settings files control Claude Code permissions:
+
+- **`.claude/settings.json`** — project-level, inherits from `.claude-org/settings.json` (committed)
+- **`.claude/settings.local.json`** — local dev overrides (gitignored)
+
+The local file auto-allows all tools (`Bash(*)`, `Read(*)`, `Edit(*)`, `Write(*)`, `WebFetch(*)`, `Task(*)`, `mcp__*`) while keeping hard deny rules for:
+
+| Category | Blocked |
+|----------|---------|
+| Destructive git | `push --force`, `reset --hard`, `clean -fdx` |
+| Filesystem nuke | `rm -rf /`, `~/`, `.` |
+| Privilege escalation | `sudo *` |
+| Public publishing | npm/yarn/twine/cargo publish, docker push |
+| Infra destruction | `kubectl delete namespace`, `terraform destroy` |
+| Secrets | `.ssh/`, `.gnupg/`, AWS creds, `.env*`, `*.pem`, `*.key` |
+
+To reset to prompted mode: delete `.claude/settings.local.json`.
+
+## Slash Commands (L0-L9)
+
+Monotonic command system where each level depends only on levels below it:
+
+| Level | Command | Purpose |
+|-------|---------|---------|
+| L0 | `/check` | Fail-fast: lint + test + codegen-check + architecture-check |
+| L1 | `/schema <name>` | Create/modify semantic YAML table definition |
+| L2 | `/model <name>` | Generate Pydantic model from YAML (inherits BaseEntity) |
+| L3 | `/table <name>` | Generate SQLAlchemy Table + Drizzle schema |
+| L4 | `/crud <name>` | Wire up Crud(table) instance |
+| L5 | `/hook <purpose>` | Create Agent SDK hook |
+| L6 | `/test <target>` | Generate test file (TDD red/green/refactor) |
+| L7 | `/migrate <desc>` | Generate + apply Neon migration (branch workflow) |
+| L8 | `/sync <scope>` | Sync tasks → GitHub Issues + Projects |
+| L9 | `/ship <name> - <desc>` | Full pipeline: L0→L1→L2→L3→L4→L6→L7→commit |
+
 ## Directory Map
 
 ```
