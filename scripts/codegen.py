@@ -130,7 +130,7 @@ def main():
     args = parser.parse_args()
 
     enums = load_enums()
-    table_names = ["tasks", "subtasks", "task_dependencies", "agent_activity"]
+    table_names = ["tasks", "subtasks", "task_dependencies", "agent_activity", "mlflow_traces"]
     tables = [load_table(name) for name in table_names]
 
     print(f"Loaded {len(enums)} enums: {', '.join(enums.keys())}")

@@ -1,0 +1,13 @@
+[Unit]
+Description=MLflow trace sync (SQLite -> Neon)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=org-jadecli
+ExecStart=/usr/local/bin/mlflow-sync
+EnvironmentFile=-/etc/mlflow/clone.env
+EnvironmentFile=-/etc/mlflow/neon.env
+StandardOutput=journal
+StandardError=journal

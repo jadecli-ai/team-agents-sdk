@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+"""Sync MLflow traces from local SQLite to Neon Postgres.
+
+Reads local MLflow runs newer than the stored watermark, upserts
+summaries into the mlflow_traces Neon table, and updates the watermark.
+
+Environment:
+    CLONE_ID            — from /etc/mlflow/clone.env
+    PRJ_NEON_DATABASE_URL — from /etc/mlflow/neon.env
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+def load_env_file(path: str) -> None:
+    """Load key=value pairs from a file into os.environ."""
+    env_path = Path(path)
+    if not env_path.exists():
+        return
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip())
+
+
+def get_watermark() -> float:
+    """Read the sync watermark (epoch timestamp). Returns 0 if no watermark."""
+    wm_path = Path.home() / ".mlflow" / "sync_watermark"
+    if wm_path.exists():
+        try:
+            return float(wm_path.read_text().strip())
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
+def set_watermark(ts: float) -> None:
+    """Write the sync watermark."""
+    wm_path = Path.home() / ".mlflow" / "sync_watermark"
+    wm_path.parent.mkdir(parents=True, exist_ok=True)
+    wm_path.write_text(str(ts))
+
+
+def get_local_runs(since_epoch: float) -> list[dict]:
+    """Query local MLflow SQLite for runs newer than the watermark."""
+    try:
+        import mlflow
+    except ImportError:
+        print("ERROR: mlflow not installed", file=sys.stderr)
+        sys.exit(1)
+
+    mlflow_dir = Path.home() / ".mlflow"
+    db_path = mlflow_dir / "mlruns.db"
+    if not db_path.exists():
+        return []
+
+    mlflow.set_tracking_uri(f"sqlite:///{db_path}")
+    client = mlflow.MlflowClient()
+
+    runs = []
+    for exp in client.search_experiments():
+        for run in client.search_runs(
+            experiment_ids=[exp.experiment_id],
+            order_by=["start_time ASC"],
+        ):
+            start_ms = run.info.start_time or 0
+            start_epoch = start_ms / 1000.0
+            if start_epoch <= since_epoch:
+                continue
+
+            end_ms = run.info.end_time
+            duration_ms = None
+            if end_ms and start_ms:
+                duration_ms = end_ms - start_ms
+
+            runs.append(
+                {
+                    "experiment_name": exp.name,
+                    "run_id": run.info.run_id,
+                    "start_time": datetime.fromtimestamp(start_epoch, tz=timezone.utc),
+                    "end_time": (
+                        datetime.fromtimestamp(end_ms / 1000.0, tz=timezone.utc)
+                        if end_ms
+                        else None
+                    ),
+                    "duration_ms": duration_ms,
+                    "status": run.info.status,
+                    "total_tokens": _safe_int(run.data.metrics.get("total_tokens")),
+                    "estimated_cost_usd": run.data.metrics.get("estimated_cost_usd"),
+                    "model_id": run.data.params.get("model_id"),
+                }
+            )
+
+    return runs
+
+
+def _safe_int(val) -> int | None:
+    """Convert to int if not None."""
+    if val is None:
+        return None
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def upsert_to_neon(runs: list[dict], clone_id: str) -> int:
+    """Upsert runs into Neon mlflow_traces table. Returns count of synced rows."""
+    neon_url = os.environ.get("PRJ_NEON_DATABASE_URL")
+    if not neon_url:
+        print("ERROR: PRJ_NEON_DATABASE_URL not set", file=sys.stderr)
+        sys.exit(1)
+
+    # Convert async URL to sync for psycopg2/asyncpg -> plain postgres
+    sync_url = neon_url.replace("postgresql+asyncpg://", "postgresql://")
+
+    try:
+        import psycopg2
+    except ImportError:
+        print("ERROR: psycopg2 not installed, falling back to asyncpg", file=sys.stderr)
+        sys.exit(1)
+
+    conn = psycopg2.connect(sync_url)
+    cur = conn.cursor()
+
+    synced = 0
+    for run in runs:
+        cur.execute(
+            """
+            INSERT INTO mlflow_traces
+                (clone_id, experiment_name, run_id, start_time, end_time,
+                 duration_ms, status, total_tokens, estimated_cost_usd,
+                 model_id, synced_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            ON CONFLICT (run_id) DO UPDATE SET
+                end_time = EXCLUDED.end_time,
+                duration_ms = EXCLUDED.duration_ms,
+                status = EXCLUDED.status,
+                total_tokens = EXCLUDED.total_tokens,
+                estimated_cost_usd = EXCLUDED.estimated_cost_usd,
+                synced_at = NOW()
+            """,
+            (
+                clone_id,
+                run["experiment_name"],
+                run["run_id"],
+                run["start_time"],
+                run["end_time"],
+                run["duration_ms"],
+                run["status"],
+                run["total_tokens"],
+                run["estimated_cost_usd"],
+                run["model_id"],
+            ),
+        )
+        synced += 1
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    return synced
+
+
+def main() -> None:
+    # Load environment from config files
+    load_env_file("/etc/mlflow/clone.env")
+    load_env_file("/etc/mlflow/neon.env")
+
+    clone_id = os.environ.get("CLONE_ID", "unknown")
+    watermark = get_watermark()
+
+    print(f"mlflow-sync: clone={clone_id} watermark={watermark}")
+
+    runs = get_local_runs(watermark)
+    if not runs:
+        print("mlflow-sync: no new runs to sync")
+        return
+
+    print(f"mlflow-sync: found {len(runs)} new runs")
+    synced = upsert_to_neon(runs, clone_id)
+
+    # Update watermark to latest run start time
+    latest = max(r["start_time"].timestamp() for r in runs)
+    set_watermark(latest)
+
+    print(f"mlflow-sync: synced {synced} runs, watermark={latest}")
+
+
+if __name__ == "__main__":
+    main()

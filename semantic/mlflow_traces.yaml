@@ -1,0 +1,128 @@
+name: mlflow_traces
+title: "MLflow Traces"
+description: "Synced trace summaries from local SQLite to Neon (one row per MLflow run)"
+sql_table: public.mlflow_traces
+public: true
+data_source: neon
+
+columns:
+  id:
+    type: uuid
+    primary_key: true
+    default: gen_random_uuid()
+    title: "Trace ID"
+
+  clone_id:
+    type: varchar(50)
+    nullable: false
+    description: "Which WSL2 clone produced this trace"
+
+  experiment_name:
+    type: varchar(200)
+    nullable: false
+    description: "MLflow experiment name"
+
+  run_id:
+    type: varchar(64)
+    nullable: false
+    description: "MLflow run ID (unique across all clones)"
+
+  start_time:
+    type: timestamptz
+    nullable: false
+    description: "When the traced run started"
+
+  end_time:
+    type: timestamptz
+    nullable: true
+    description: "When the traced run ended"
+
+  duration_ms:
+    type: integer
+    nullable: true
+    validators:
+      - ge: 0
+    description: "Duration of the run in milliseconds"
+
+  status:
+    type: varchar(20)
+    nullable: false
+    description: "Run status: RUNNING, FINISHED, FAILED, KILLED"
+
+  total_tokens:
+    type: integer
+    nullable: true
+    validators:
+      - ge: 0
+    description: "Total tokens consumed across all API calls"
+
+  estimated_cost_usd:
+    type: float
+    nullable: true
+    validators:
+      - ge: 0
+    description: "Estimated cost of this run in USD"
+
+  model_id:
+    type: varchar(100)
+    nullable: true
+    description: "Primary model used (e.g. claude-opus-4-6)"
+
+  synced_at:
+    type: timestamptz
+    nullable: false
+    server_default: now()
+    description: "When this row was synced to Neon"
+
+  created_at:
+    type: timestamptz
+    nullable: false
+    server_default: now()
+
+dimensions:
+  - name: clone_id
+    sql: "{TABLE}.clone_id"
+    type: string
+    title: "Clone"
+  - name: experiment_name
+    sql: "{TABLE}.experiment_name"
+    type: string
+    title: "Experiment"
+  - name: status
+    sql: "{TABLE}.status"
+    type: string
+    title: "Status"
+  - name: model_id
+    sql: "{TABLE}.model_id"
+    type: string
+    title: "Model"
+  - name: sync_date
+    sql: "{TABLE}.synced_at"
+    type: time
+    granularities: [hour, day, week]
+
+measures:
+  - name: trace_count
+    sql: "COUNT(*)"
+    type: count
+    title: "Total Traces"
+  - name: total_tokens
+    sql: "SUM({TABLE}.total_tokens)"
+    type: sum
+    title: "Total Tokens"
+  - name: total_cost
+    sql: "SUM({TABLE}.estimated_cost_usd)"
+    type: sum
+    format: currency
+    title: "Total Cost"
+  - name: avg_duration
+    sql: "AVG({TABLE}.duration_ms)"
+    type: avg
+    title: "Avg Duration (ms)"
+
+indexes:
+  - columns: [clone_id]
+  - columns: [run_id]
+    unique: true
+  - columns: [experiment_name]
+  - columns: [synced_at]

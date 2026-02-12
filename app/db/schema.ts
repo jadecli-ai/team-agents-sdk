@@ -1,144 +1,78 @@
-/**
- * Drizzle pgTable definitions matching semantic/*.yaml.
- * GENERATED — do not hand-edit. Run `make codegen` to regenerate.
- *
- * @schema tasks, subtasks, task_dependencies, agent_activity
- * @depends_on semantic/tasks.yaml, semantic/subtasks.yaml, semantic/task_dependencies.yaml, semantic/agent_activity.yaml
- * @depended_by app/page.tsx, lib/db.ts
- * @semver major
- */
-import {
-  pgTable,
-  uuid,
-  varchar,
-  text,
-  real,
-  integer,
-  timestamp,
-  uniqueIndex,
-  index,
-  check,
-} from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
+// Auto-generated from semantic/*.yaml — do not edit manually
+import { pgTable, uuid, varchar, text, real, integer, timestamp } from "drizzle-orm/pg-core";
 
-export const tasks = pgTable(
-  "tasks",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    title: varchar("title", { length: 200 }).notNull(),
-    description: text("description"),
-    status: varchar("status", { length: 20 }).notNull().default("pending"),
-    priority: varchar("priority", { length: 20 }).notNull().default("medium"),
-    assignedAgent: varchar("assigned_agent", { length: 30 }),
-    sessionId: varchar("session_id", { length: 100 }),
-    estimatedCostUsd: real("estimated_cost_usd").notNull().default(0.0),
-    actualCostUsd: real("actual_cost_usd").notNull().default(0.0),
-    startedAt: timestamp("started_at", { withTimezone: true }),
-    completedAt: timestamp("completed_at", { withTimezone: true }),
-    dueAt: timestamp("due_at", { withTimezone: true }),
-    githubIssueNumber: integer("github_issue_number"),
-    githubProjectItemId: varchar("github_project_item_id", { length: 50 }),
-    schemaVersion: integer("schema_version").notNull().default(1),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    index("ix_tasks_status").on(table.status),
-    index("ix_tasks_priority").on(table.priority),
-    index("ix_tasks_assigned_agent").on(table.assignedAgent),
-  ]
-);
+export const tasks = pgTable("tasks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: varchar("title", { length: 200 }).notNull(),
+  description: text("description"),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  priority: varchar("priority", { length: 20 }).notNull().default("medium"),
+  assigned_agent: varchar("assigned_agent", { length: 30 }),
+  session_id: varchar("session_id", { length: 100 }),
+  estimated_cost_usd: real("estimated_cost_usd").notNull().default(0.0),
+  actual_cost_usd: real("actual_cost_usd").notNull().default(0.0),
+  started_at: timestamp("started_at", { withTimezone: true }),
+  completed_at: timestamp("completed_at", { withTimezone: true }),
+  due_at: timestamp("due_at", { withTimezone: true }),
+  github_issue_number: integer("github_issue_number"),
+  github_project_item_id: varchar("github_project_item_id", { length: 50 }),
+  schema_version: integer("schema_version").notNull().default(1),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
-export const agentActivity = pgTable(
-  "agent_activity",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    taskId: uuid("task_id").references(() => tasks.id, {
-      onDelete: "set null",
-    }),
-    subtaskId: uuid("subtask_id"),
-    agentName: varchar("agent_name", { length: 50 }).notNull(),
-    agentRole: varchar("agent_role", { length: 30 }),
-    sessionId: varchar("session_id", { length: 100 }),
-    hookEvent: varchar("hook_event", { length: 20 }).notNull(),
-    toolName: varchar("tool_name", { length: 50 }),
-    toolInputSummary: varchar("tool_input_summary", { length: 2000 }),
-    toolResponseSummary: varchar("tool_response_summary", { length: 2000 }),
-    durationMs: integer("duration_ms"),
-    costUsd: real("cost_usd"),
-    numTurns: integer("num_turns"),
-    eventAt: timestamp("event_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    index("ix_agent_activity_task_id").on(table.taskId),
-    index("ix_agent_activity_agent_name").on(table.agentName),
-    index("ix_agent_activity_hook_event").on(table.hookEvent),
-    index("ix_agent_activity_event_at").on(table.eventAt),
-  ]
-);
+export const subtasks = pgTable("subtasks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  parent_task_id: uuid("parent_task_id").notNull(),
+  subtask_type: varchar("subtask_type", { length: 20 }).notNull(),
+  title: varchar("title", { length: 200 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  output_summary: text("output_summary"),
+  github_issue_number: integer("github_issue_number"),
+  github_project_item_id: varchar("github_project_item_id", { length: 50 }),
+  agent_activity_id: uuid("agent_activity_id"),
+  schema_version: integer("schema_version").notNull().default(1),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
-export const subtasks = pgTable(
-  "subtasks",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    parentTaskId: uuid("parent_task_id")
-      .notNull()
-      .references(() => tasks.id, { onDelete: "cascade" }),
-    subtaskType: varchar("subtask_type", { length: 20 }).notNull(),
-    title: varchar("title", { length: 200 }).notNull(),
-    status: varchar("status", { length: 20 }).notNull().default("pending"),
-    outputSummary: text("output_summary"),
-    githubIssueNumber: integer("github_issue_number"),
-    githubProjectItemId: varchar("github_project_item_id", { length: 50 }),
-    agentActivityId: uuid("agent_activity_id").references(
-      () => agentActivity.id,
-      { onDelete: "set null" }
-    ),
-    schemaVersion: integer("schema_version").notNull().default(1),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    index("ix_subtasks_parent_task_id").on(table.parentTaskId),
-    index("ix_subtasks_subtask_type").on(table.subtaskType),
-    index("ix_subtasks_status").on(table.status),
-  ]
-);
+export const task_dependencies = pgTable("task_dependencies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  blocker_task_id: uuid("blocker_task_id").notNull(),
+  blocked_task_id: uuid("blocked_task_id").notNull(),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
-export const taskDependencies = pgTable(
-  "task_dependencies",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    blockerTaskId: uuid("blocker_task_id")
-      .notNull()
-      .references(() => tasks.id, { onDelete: "cascade" }),
-    blockedTaskId: uuid("blocked_task_id")
-      .notNull()
-      .references(() => tasks.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    check(
-      "ck_no_self_dependency",
-      sql`${table.blockerTaskId} != ${table.blockedTaskId}`
-    ),
-    uniqueIndex("uq_dependency").on(table.blockerTaskId, table.blockedTaskId),
-    index("ix_task_dependencies_blocker").on(table.blockerTaskId),
-    index("ix_task_dependencies_blocked").on(table.blockedTaskId),
-  ]
-);
+export const agent_activity = pgTable("agent_activity", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  task_id: uuid("task_id"),
+  subtask_id: uuid("subtask_id"),
+  agent_name: varchar("agent_name", { length: 50 }).notNull(),
+  agent_role: varchar("agent_role", { length: 30 }),
+  session_id: varchar("session_id", { length: 100 }),
+  hook_event: varchar("hook_event", { length: 20 }).notNull(),
+  tool_name: varchar("tool_name", { length: 50 }),
+  tool_input_summary: varchar("tool_input_summary", { length: 2000 }),
+  tool_response_summary: varchar("tool_response_summary", { length: 2000 }),
+  duration_ms: integer("duration_ms"),
+  cost_usd: real("cost_usd"),
+  num_turns: integer("num_turns"),
+  event_at: timestamp("event_at", { withTimezone: true }).notNull().defaultNow(),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const mlflow_traces = pgTable("mlflow_traces", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clone_id: varchar("clone_id", { length: 50 }).notNull(),
+  experiment_name: varchar("experiment_name", { length: 200 }).notNull(),
+  run_id: varchar("run_id", { length: 64 }).notNull(),
+  start_time: timestamp("start_time", { withTimezone: true }).notNull(),
+  end_time: timestamp("end_time", { withTimezone: true }),
+  duration_ms: integer("duration_ms"),
+  status: varchar("status", { length: 20 }).notNull(),
+  total_tokens: integer("total_tokens"),
+  estimated_cost_usd: real("estimated_cost_usd"),
+  model_id: varchar("model_id", { length: 100 }),
+  synced_at: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
