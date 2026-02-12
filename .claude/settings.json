@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "_inherits": "~/projects/.claude-org/settings.json",
+  "_project": "jadecli-team-agents-sdk",
+  "_description": "Opus 4.6 team agent system using Claude Agent SDK + MLflow 3.9",
+
+  "permissions": {
+    "additionalDirectories": [
+      "/home/org-jadecli/projects/.claude-org",
+      "/home/org-jadecli/.claude"
+    ],
+
+    "allow": [
+      "Bash(mlflow *)",
+      "Bash(uvicorn *)",
+      "Bash(fastapi *)",
+      "Bash(alembic *)",
+      "Bash(redis-cli *)",
+      "WebFetch(domain:mlflow.org)",
+      "WebFetch(domain:docs.mlflow.org)",
+      "mcp__redis__*"
+    ]
+  },
+
+  "env": {
+    "OTEL_RESOURCE_ATTRIBUTES": "organization=jadecli,project=jadecli-team-agents-sdk,stack=claude-sdk-mlflow"
+  }
+}
