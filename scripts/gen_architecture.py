@@ -63,6 +63,7 @@ def discover_files() -> list[Path]:
 
 # ── Layer classification ────────────────────────────────────────────
 
+
 def classify_layer(path: Path) -> str:
     s = str(path)
     if s.startswith("semantic/"):
@@ -160,7 +161,9 @@ def extract_metadata(path: Path) -> dict:
             if prefix == "@/":
                 candidate = rest
             else:
-                candidate = str((path.parent / (prefix + rest)).resolve().relative_to(ROOT.resolve()))
+                candidate = str(
+                    (path.parent / (prefix + rest)).resolve().relative_to(ROOT.resolve())
+                )
             # try with extensions
             for ext in ("", ".ts", ".tsx", "/index.ts"):
                 if (ROOT / (candidate + ext)).exists():
@@ -172,6 +175,7 @@ def extract_metadata(path: Path) -> dict:
 
 # ── Graph assembly ──────────────────────────────────────────────────
 
+
 def build_graph() -> dict:
     files = discover_files()
     nodes = []
@@ -182,12 +186,14 @@ def build_graph() -> dict:
         meta = extract_metadata(f)
         if not meta:
             continue
-        nodes.append({
-            "id": str(f),
-            "layer": meta["layer"],
-            "semver": meta.get("semver"),
-            "schema": meta.get("schema"),
-        })
+        nodes.append(
+            {
+                "id": str(f),
+                "layer": meta["layer"],
+                "semver": meta.get("semver"),
+                "schema": meta.get("schema"),
+            }
+        )
 
         # Edges from depends_on
         for dep in meta.get("depends_on", []):
@@ -226,8 +232,7 @@ def build_graph() -> dict:
             "total_files": len(nodes),
             "total_edges": len(edges),
             "by_layer": {
-                layer: sum(1 for n in nodes if n["layer"] == layer)
-                for layer in LAYER_ORDER
+                layer: sum(1 for n in nodes if n["layer"] == layer) for layer in LAYER_ORDER
             },
         },
     }
@@ -243,6 +248,7 @@ def _get_version() -> str:
 
 
 # ── HTML generation ─────────────────────────────────────────────────
+
 
 def generate_html(graph: dict) -> str:
     graph_json = json.dumps(graph, indent=2)
@@ -588,6 +594,7 @@ window.addEventListener('resize', renderGraph);
 
 # ── CLI ─────────────────────────────────────────────────────────────
 
+
 def main():
     graph = build_graph()
 
@@ -603,10 +610,14 @@ def main():
             print("ARCHITECTURE.html missing. Run: make architecture")
             sys.exit(1)
         existing = out.read_text()
-        # Compare graph data (ignore timestamp)
-        existing_data = existing.split("const DATA = ")[1].split(";\n")[0] if "const DATA = " in existing else ""
-        new_data = html.split("const DATA = ")[1].split(";\n")[0]
-        # Compare node/edge counts as a staleness heuristic
+        # Compare graph data, stripping generated_at timestamp
+        _ts_re = re.compile(r'"generated_at":\s*"[^"]+"')
+        existing_data = (
+            _ts_re.sub("", existing.split("const DATA = ")[1].split(";\n")[0])
+            if "const DATA = " in existing
+            else ""
+        )
+        new_data = _ts_re.sub("", html.split("const DATA = ")[1].split(";\n")[0])
         if existing_data != new_data:
             print("ARCHITECTURE.html is stale. Run: make architecture")
             sys.exit(1)
@@ -614,7 +625,9 @@ def main():
         return
 
     out.write_text(html)
-    print(f"Generated {out} ({graph['stats']['total_files']} files, {graph['stats']['total_edges']} edges)")
+    print(
+        f"Generated {out} ({graph['stats']['total_files']} files, {graph['stats']['total_edges']} edges)"
+    )
 
 
 if __name__ == "__main__":
