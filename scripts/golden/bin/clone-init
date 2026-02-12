@@ -1,0 +1,243 @@
+#!/usr/bin/env bash
+# Initialize a WSL2 clone after import from golden image.
+#
+# Usage:
+#   clone-init team-alpha     # Set up clone identity + services
+#   clone-init openclaw       # Works for any clone name
+#
+# What it does:
+#   1. Sets CLONE_ID / CLONE_NAME in /etc/mlflow/clone.env
+#   2. Sets hostname to clone name
+#   3. Regenerates machine-id
+#   4. Copies neon.env.example -> neon.env (prompts for URL)
+#   5. Prompts for Dragonfly/Redis cache URL
+#   6. Sets up appropriate MCP config based on clone name
+#   7. Prompts for gh auth login
+#   8. Clones org repos
+#   9. Prompts for Tailscale up
+#  10. Verifies Docker Desktop integration
+#  11. Bootstraps team-agents-sdk (.env, make install, make test)
+#  12. Runs distro-health-check
+set -euo pipefail
+
+BOLD='\033[1m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+if [[ $# -lt 1 ]]; then
+    echo "Usage: clone-init <clone-name>"
+    echo ""
+    echo "Clone names: team-alpha, team-beta, team-gamma, openclaw, model-runner"
+    exit 1
+fi
+
+CLONE_NAME="$1"
+CLONE_ID="$CLONE_NAME"
+
+echo -e "${BOLD}Initializing clone: $CLONE_NAME${NC}"
+echo ""
+
+# ── 1. Clone identity ───────────────────────────────────────────────
+echo -e "${BOLD}[1/12] Setting clone identity${NC}"
+sudo mkdir -p /etc/mlflow
+sudo tee /etc/mlflow/clone.env > /dev/null <<EOF
+CLONE_ID=$CLONE_ID
+CLONE_NAME=$CLONE_NAME
+CLONE_CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+EOF
+echo "  Written /etc/mlflow/clone.env"
+
+# ── 2. Hostname ──────────────────────────────────────────────────────
+echo -e "${BOLD}[2/12] Setting hostname${NC}"
+sudo hostnamectl set-hostname "$CLONE_NAME" 2>/dev/null || \
+    echo "$CLONE_NAME" | sudo tee /etc/hostname > /dev/null
+echo "  Hostname set to $CLONE_NAME"
+
+# ── 3. Machine ID ───────────────────────────────────────────────────
+echo -e "${BOLD}[3/12] Regenerating machine-id${NC}"
+sudo rm -f /etc/machine-id /var/lib/dbus/machine-id
+sudo systemd-machine-id-setup 2>/dev/null || \
+    cat /proc/sys/kernel/random/uuid | tr -d '-' | sudo tee /etc/machine-id > /dev/null
+echo "  New machine-id: $(cat /etc/machine-id | head -c 8)..."
+
+# ── 4. Neon credentials ─────────────────────────────────────────────
+echo -e "${BOLD}[4/12] Neon credentials${NC}"
+if [ ! -f /etc/mlflow/neon.env ]; then
+    sudo cp /etc/mlflow/neon.env.example /etc/mlflow/neon.env 2>/dev/null || true
+    echo -e "  ${YELLOW}Edit /etc/mlflow/neon.env with your Neon connection string${NC}"
+    echo "  Example: PRJ_NEON_DATABASE_URL=postgresql+asyncpg://user:pass@ep-xxx.neon.tech/neondb"
+    read -rp "  Enter Neon URL now (or press Enter to skip): " neon_url
+    if [[ -n "$neon_url" ]]; then
+        echo "PRJ_NEON_DATABASE_URL=$neon_url" | sudo tee /etc/mlflow/neon.env > /dev/null
+        echo "  Written to /etc/mlflow/neon.env"
+    fi
+else
+    echo "  /etc/mlflow/neon.env already exists"
+fi
+
+# ── 5. Dragonfly/Redis cache ────────────────────────────────────────
+echo -e "${BOLD}[5/12] Dragonfly/Redis cache URL${NC}"
+DRAGONFLY_ENV="/etc/mlflow/dragonfly.env"
+DRAGONFLY_DEFAULT="redis://localhost:6379/0"
+if [ -f "$DRAGONFLY_ENV" ] && grep -q "^PRJ_DRAGONFLY_URL=" "$DRAGONFLY_ENV" 2>/dev/null; then
+    echo "  $DRAGONFLY_ENV already configured"
+else
+    echo "  Default: $DRAGONFLY_DEFAULT"
+    read -rp "  Enter Dragonfly/Redis URL (or press Enter for default): " dragonfly_url
+    dragonfly_url="${dragonfly_url:-$DRAGONFLY_DEFAULT}"
+    echo "PRJ_DRAGONFLY_URL=$dragonfly_url" | sudo tee "$DRAGONFLY_ENV" > /dev/null
+    echo "  Written to $DRAGONFLY_ENV"
+fi
+
+# ── 6. MCP config ───────────────────────────────────────────────────
+echo -e "${BOLD}[6/12] MCP configuration${NC}"
+MCP_SRC_DIR="/usr/local/share/golden/configs/mcp"
+MCP_DEST="$HOME/.claude/.mcp.json"
+
+if [ -d "$MCP_SRC_DIR" ]; then
+    case "$CLONE_NAME" in
+        team-alpha|team-beta|team-gamma)
+            cp "$MCP_SRC_DIR/mcp-team.json" "$MCP_DEST" 2>/dev/null || true
+            echo "  Installed team MCP config"
+            ;;
+        openclaw)
+            cp "$MCP_SRC_DIR/mcp-openclaw.json" "$MCP_DEST" 2>/dev/null || true
+            echo "  Installed openclaw MCP config"
+            ;;
+        model-runner)
+            cp "$MCP_SRC_DIR/mcp-model-runner.json" "$MCP_DEST" 2>/dev/null || true
+            echo "  Installed model-runner MCP config"
+            ;;
+        *)
+            echo "  Unknown clone name, using team MCP config"
+            cp "$MCP_SRC_DIR/mcp-team.json" "$MCP_DEST" 2>/dev/null || true
+            ;;
+    esac
+else
+    echo -e "  ${YELLOW}MCP configs not installed at $MCP_SRC_DIR${NC}"
+fi
+
+# ── 7. GitHub auth ──────────────────────────────────────────────────
+echo -e "${BOLD}[7/12] GitHub authentication${NC}"
+if gh auth status &>/dev/null; then
+    echo "  Already authenticated with GitHub"
+else
+    echo "  GitHub CLI authentication required."
+    read -rp "  Run 'gh auth login' now? [Y/n] " do_gh
+    if [[ "${do_gh:-Y}" =~ ^[Yy]$ ]]; then
+        gh auth login
+    else
+        echo -e "  ${YELLOW}Skipped — run 'gh auth login' later${NC}"
+    fi
+fi
+
+# ── 8. Clone repos ──────────────────────────────────────────────────
+echo -e "${BOLD}[8/12] Cloning org repos${NC}"
+if command -v gh-clone-orgs &>/dev/null; then
+    read -rp "  Clone all org repos now? [Y/n] " do_repos
+    if [[ "${do_repos:-Y}" =~ ^[Yy]$ ]]; then
+        gh-clone-orgs
+    else
+        echo "  Skipped — run 'gh-clone-orgs' later"
+    fi
+else
+    echo -e "  ${YELLOW}gh-clone-orgs not installed${NC}"
+fi
+
+# ── 9. Tailscale ────────────────────────────────────────────────────
+echo -e "${BOLD}[9/12] Tailscale setup${NC}"
+if command -v tailscale &>/dev/null; then
+    echo "  Setting Tailscale hostname to $CLONE_NAME"
+    read -rp "  Start Tailscale now? [Y/n] " do_ts
+    if [[ "${do_ts:-Y}" =~ ^[Yy]$ ]]; then
+        # Load tailscale flags
+        TS_FLAGS=""
+        if [ -f /etc/mlflow/tailscale.env ]; then
+            source /etc/mlflow/tailscale.env 2>/dev/null || true
+            TS_FLAGS="${TAILSCALE_FLAGS:-}"
+        fi
+        sudo tailscaled $TS_FLAGS &
+        sleep 2
+        sudo tailscale up --hostname="$CLONE_NAME"
+    else
+        echo "  Skipped — start manually later"
+    fi
+else
+    echo -e "  ${YELLOW}Tailscale not installed${NC}"
+fi
+
+# ── 10. Docker Desktop ──────────────────────────────────────────────
+echo -e "${BOLD}[10/12] Docker Desktop integration${NC}"
+if docker ps &>/dev/null; then
+    echo -e "  ${GREEN}Docker available${NC}"
+    if docker model --help &>/dev/null; then
+        echo -e "  ${GREEN}Docker Model Runner available${NC}"
+    else
+        echo "  Docker Model Runner not available (enable WSL integration in Docker Desktop)"
+    fi
+else
+    echo -e "  ${YELLOW}Docker not available — enable WSL integration in Docker Desktop Settings > Resources > WSL Integration${NC}"
+fi
+
+# ── 11. Bootstrap team-agents-sdk ───────────────────────────────────
+echo -e "${BOLD}[11/12] Bootstrap team-agents-sdk${NC}"
+SDK_DIR="$HOME/projects/jadecli-ai/team-agents-sdk"
+if [ -d "$SDK_DIR" ]; then
+    echo "  Found SDK at $SDK_DIR"
+    if [ ! -f "$SDK_DIR/.env" ]; then
+        echo "  Creating .env from template..."
+        cp "$SDK_DIR/env.template" "$SDK_DIR/.env"
+        # Inject Neon URL if available
+        if [ -f /etc/mlflow/neon.env ]; then
+            neon_url=$(grep "^PRJ_NEON_DATABASE_URL=" /etc/mlflow/neon.env 2>/dev/null | cut -d= -f2-)
+            if [[ -n "$neon_url" ]]; then
+                sed -i "s|^PRJ_NEON_DATABASE_URL=.*|PRJ_NEON_DATABASE_URL=$neon_url|" "$SDK_DIR/.env"
+                echo "  Injected Neon URL from /etc/mlflow/neon.env"
+            fi
+        fi
+        # Inject Dragonfly URL if available
+        if [ -f "$DRAGONFLY_ENV" ]; then
+            df_url=$(grep "^PRJ_DRAGONFLY_URL=" "$DRAGONFLY_ENV" 2>/dev/null | cut -d= -f2-)
+            if [[ -n "$df_url" ]]; then
+                if grep -q "^PRJ_DRAGONFLY_URL=" "$SDK_DIR/.env" 2>/dev/null; then
+                    sed -i "s|^PRJ_DRAGONFLY_URL=.*|PRJ_DRAGONFLY_URL=$df_url|" "$SDK_DIR/.env"
+                else
+                    echo "PRJ_DRAGONFLY_URL=$df_url" >> "$SDK_DIR/.env"
+                fi
+                echo "  Injected Dragonfly URL from $DRAGONFLY_ENV"
+            fi
+        else
+            # Default fallback
+            if ! grep -q "^PRJ_DRAGONFLY_URL=" "$SDK_DIR/.env" 2>/dev/null; then
+                echo "PRJ_DRAGONFLY_URL=$DRAGONFLY_DEFAULT" >> "$SDK_DIR/.env"
+                echo "  Set default Dragonfly URL: $DRAGONFLY_DEFAULT"
+            fi
+        fi
+        echo -e "  ${YELLOW}Edit $SDK_DIR/.env to fill in remaining values${NC}"
+    fi
+    read -rp "  Run 'make install && make test'? [Y/n] " do_sdk
+    if [[ "${do_sdk:-Y}" =~ ^[Yy]$ ]]; then
+        (cd "$SDK_DIR" && make install && make test)
+    fi
+else
+    echo "  SDK not found — run 'gh-clone-orgs' first"
+fi
+
+# ── 12. Health check ────────────────────────────────────────────────
+echo ""
+echo -e "${BOLD}[12/12] Running health check${NC}"
+if command -v distro-health-check &>/dev/null; then
+    distro-health-check || true
+else
+    echo -e "  ${YELLOW}distro-health-check not installed${NC}"
+fi
+
+echo ""
+echo -e "${GREEN}${BOLD}Clone '$CLONE_NAME' initialized.${NC}"
+echo ""
+echo "Next steps:"
+echo "  1. Edit /etc/mlflow/neon.env if not done"
+echo "  2. Edit ~/projects/jadecli-ai/team-agents-sdk/.env"
+echo "  3. Run 'make test' to verify"

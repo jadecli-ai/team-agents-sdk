@@ -2,7 +2,7 @@
 
 Re-exports all public types for convenient imports:
 
-    from src.models import Task, Subtask, AgentActivity, TaskDependency
+    from src.models import Task, Subtask, AgentActivity, TaskDependency, MlflowTrace
     from src.models import TaskStatus, TaskPriority, AgentRole, SubtaskType
 """
 
@@ -11,6 +11,7 @@ from src.models.base import BaseEntity
 from src.models.task import Task, TaskDependency
 from src.models.subtask import Subtask
 from src.models.agent_activity import AgentActivity
+from src.models.mlflow_trace import MlflowTrace
 
 __all__ = [
     "TaskStatus",
@@ -22,4 +23,5 @@ __all__ = [
     "TaskDependency",
     "Subtask",
     "AgentActivity",
+    "MlflowTrace",
 ]
