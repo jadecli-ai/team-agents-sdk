@@ -1,0 +1,24 @@
+# CodeRabbit Retry — re-request reviews that hit rate limits
+#
+# CodeRabbit itself is installed as a GitHub App (no workflow needed for reviews).
+# This action handles retries when rate-limited.
+
+name: CodeRabbit Retry
+
+on:
+  schedule:
+    - cron: "0 */2 * * *" # Every 2 hours
+  workflow_dispatch:
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Retry rate-limited CodeRabbit reviews
+        uses: idrinth/coderabbit-retry-action@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          max-retries: 4
+          cooldown-hours: 2

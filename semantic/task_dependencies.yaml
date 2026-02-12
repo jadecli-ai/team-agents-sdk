@@ -1,0 +1,50 @@
+name: task_dependencies
+title: "Task Dependencies"
+description: "Many-to-many dependency tracking between tasks (blocker → blocked)"
+sql_table: public.task_dependencies
+public: true
+data_source: neon
+
+columns:
+  id:
+    type: uuid
+    primary_key: true
+    default: gen_random_uuid()
+    title: "Dependency ID"
+
+  blocker_task_id:
+    type: uuid
+    nullable: false
+    foreign_key: tasks.id
+    on_delete: CASCADE
+    description: "The task that must complete first"
+
+  blocked_task_id:
+    type: uuid
+    nullable: false
+    foreign_key: tasks.id
+    on_delete: CASCADE
+    description: "The task that is waiting"
+
+  created_at:
+    type: timestamptz
+    nullable: false
+    server_default: now()
+
+constraints:
+  - type: check
+    name: no_self_dependency
+    condition: "blocker_task_id != blocked_task_id"
+  - type: unique
+    name: unique_dependency
+    columns: [blocker_task_id, blocked_task_id]
+
+indexes:
+  - columns: [blocker_task_id]
+  - columns: [blocked_task_id]
+
+model_validators:
+  - name: no_self_dependency
+    condition: "True"
+    requires: "blocker_task_id != blocked_task_id"
+    message: "A task cannot depend on itself"

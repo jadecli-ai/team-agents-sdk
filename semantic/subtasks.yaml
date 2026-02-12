@@ -1,0 +1,108 @@
+name: subtasks
+title: "Subtasks"
+description: "Child tasks with type discriminator for git hooks and agent hooks"
+sql_table: public.subtasks
+public: true
+data_source: neon
+
+columns:
+  id:
+    type: uuid
+    primary_key: true
+    default: gen_random_uuid()
+    title: "Subtask ID"
+
+  parent_task_id:
+    type: uuid
+    nullable: false
+    foreign_key: tasks.id
+    on_delete: CASCADE
+    title: "Parent Task"
+    description: "The parent task this subtask belongs to"
+
+  subtask_type:
+    type: varchar(20)
+    nullable: false
+    enum: SubtaskType
+    description: "Discriminator: git_hook, agent_hook, validation, notification"
+
+  title:
+    type: varchar(200)
+    nullable: false
+    title: "Subtask Title"
+    validators:
+      - min_length: 1
+
+  status:
+    type: varchar(20)
+    nullable: false
+    default: "pending"
+    enum: TaskStatus
+    description: "Current lifecycle status"
+
+  output_summary:
+    type: text
+    nullable: true
+    description: "Summary of subtask output or result"
+
+  # git_hook specific fields
+  github_issue_number:
+    type: integer
+    nullable: true
+    validators:
+      - ge: 1
+
+  github_project_item_id:
+    type: varchar(50)
+    nullable: true
+
+  # agent_hook specific fields
+  agent_activity_id:
+    type: uuid
+    nullable: true
+    foreign_key: agent_activity.id
+    on_delete: SET NULL
+
+  schema_version:
+    type: integer
+    nullable: false
+    default: 1
+
+  created_at:
+    type: timestamptz
+    nullable: false
+    server_default: now()
+
+  updated_at:
+    type: timestamptz
+    nullable: false
+    server_default: now()
+
+dimensions:
+  - name: subtask_type
+    sql: "{TABLE}.subtask_type"
+    type: string
+    title: "Type"
+  - name: status
+    sql: "{TABLE}.status"
+    type: string
+    title: "Status"
+
+measures:
+  - name: subtask_count
+    sql: "COUNT(*)"
+    type: count
+    title: "Total Subtasks"
+
+joins:
+  - name: tasks
+    relationship: many_to_one
+    sql: "{subtasks}.parent_task_id = {tasks}.id"
+  - name: agent_activity
+    relationship: many_to_one
+    sql: "{subtasks}.agent_activity_id = {agent_activity}.id"
+
+indexes:
+  - columns: [parent_task_id]
+  - columns: [subtask_type]
+  - columns: [status]

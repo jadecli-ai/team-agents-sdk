@@ -1,0 +1,16 @@
+enums:
+  TaskStatus:
+    values: [pending, in_progress, blocked, completed, failed, cancelled]
+    description: "Lifecycle status of a task"
+
+  TaskPriority:
+    values: [critical, high, medium, low]
+    description: "Priority level for task ordering"
+
+  AgentRole:
+    values: [team_lead, code_reviewer, test_runner, web_crawler, research_analyst]
+    description: "Role assigned to an agent in the team"
+
+  SubtaskType:
+    values: [git_hook, agent_hook, validation, notification]
+    description: "Discriminator for subtask behavior"

@@ -1,0 +1,160 @@
+# Claude Code Action — AI-powered PR review, issue implementation, @claude chat
+#
+# Auth: Uses Claude Max OAuth (auto-refreshing tokens). No API key needed.
+# Sync tokens: ./scripts/sync-claude-oauth.sh jadecli-ai/team-agents-sdk
+#
+# Required secrets (OAuth mode):
+#   CLAUDE_ACCESS_TOKEN   — from ~/.claude/.credentials.json
+#   CLAUDE_REFRESH_TOKEN  — auto-refreshes expired access tokens
+#   CLAUDE_EXPIRES_AT     — token expiry timestamp
+#   SECRETS_ADMIN_PAT     — GitHub PAT with secrets:write (for auto-refresh)
+#
+# Fallback: Set ANTHROPIC_API_KEY to use direct API billing instead.
+#
+# Triggers:
+#   - PR opened/updated → automatic code review
+#   - @claude mentioned in any comment → interactive response
+#   - Issue labeled "claude-implement" → creates implementation PR
+
+name: Claude
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  issue_comment:
+    types: [created]
+  issues:
+    types: [labeled]
+
+jobs:
+  # ── PR Code Review ──────────────────────────────────────────────────
+  review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # OAuth mode (Claude Max subscription)
+      - name: Claude Review (OAuth)
+        if: ${{ secrets.CLAUDE_ACCESS_TOKEN != '' }}
+        uses: grll/claude-code-action@beta
+        with:
+          use_oauth: true
+          claude_access_token: ${{ secrets.CLAUDE_ACCESS_TOKEN }}
+          claude_refresh_token: ${{ secrets.CLAUDE_REFRESH_TOKEN }}
+          claude_expires_at: ${{ secrets.CLAUDE_EXPIRES_AT }}
+          secrets_admin_pat: ${{ secrets.SECRETS_ADMIN_PAT }}
+          timeout_minutes: "30"
+          prompt: |
+            Review this PR for the jadecli-team-agents-sdk project.
+            Focus on:
+            - Correctness and edge cases
+            - Security (no leaked secrets, SQL injection, etc.)
+            - Consistency with existing Pydantic models and SQLAlchemy patterns
+            - Python async best practices
+            - TypeScript/Drizzle schema alignment with semantic/*.yaml
+
+      # Fallback: API key mode
+      - name: Claude Review (API Key)
+        if: ${{ secrets.CLAUDE_ACCESS_TOKEN == '' && secrets.ANTHROPIC_API_KEY != '' }}
+        uses: anthropics/claude-code-action@v1
+        with:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review this PR for the jadecli-team-agents-sdk project.
+            Focus on:
+            - Correctness and edge cases
+            - Security (no leaked secrets, SQL injection, etc.)
+            - Consistency with existing Pydantic models and SQLAlchemy patterns
+            - Python async best practices
+            - TypeScript/Drizzle schema alignment with semantic/*.yaml
+
+  # ── @claude Mention Response ────────────────────────────────────────
+  respond:
+    if: >
+      github.event_name == 'issue_comment' &&
+      contains(github.event.comment.body, '@claude')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Claude Respond (OAuth)
+        if: ${{ secrets.CLAUDE_ACCESS_TOKEN != '' }}
+        uses: grll/claude-code-action@beta
+        with:
+          use_oauth: true
+          claude_access_token: ${{ secrets.CLAUDE_ACCESS_TOKEN }}
+          claude_refresh_token: ${{ secrets.CLAUDE_REFRESH_TOKEN }}
+          claude_expires_at: ${{ secrets.CLAUDE_EXPIRES_AT }}
+          secrets_admin_pat: ${{ secrets.SECRETS_ADMIN_PAT }}
+          timeout_minutes: "30"
+          prompt: |
+            Respond to the user's question about this codebase.
+            You can answer questions, analyze code, suggest improvements,
+            and reference specific files.
+
+      - name: Claude Respond (API Key)
+        if: ${{ secrets.CLAUDE_ACCESS_TOKEN == '' && secrets.ANTHROPIC_API_KEY != '' }}
+        uses: anthropics/claude-code-action@v1
+        with:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Respond to the user's question about this codebase.
+            You can answer questions, analyze code, suggest improvements,
+            and reference specific files.
+
+  # ── Issue Implementation ────────────────────────────────────────────
+  implement:
+    if: >
+      github.event_name == 'issues' &&
+      github.event.label.name == 'claude-implement'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Claude Implement (OAuth)
+        if: ${{ secrets.CLAUDE_ACCESS_TOKEN != '' }}
+        uses: grll/claude-code-action@beta
+        with:
+          use_oauth: true
+          claude_access_token: ${{ secrets.CLAUDE_ACCESS_TOKEN }}
+          claude_refresh_token: ${{ secrets.CLAUDE_REFRESH_TOKEN }}
+          claude_expires_at: ${{ secrets.CLAUDE_EXPIRES_AT }}
+          secrets_admin_pat: ${{ secrets.SECRETS_ADMIN_PAT }}
+          timeout_minutes: "60"
+          prompt: |
+            Implement the changes described in this issue.
+            Follow existing patterns in the codebase:
+            - Pydantic v2 models in src/models/
+            - SQLAlchemy tables in src/db/tables.py
+            - Drizzle schema in app/db/schema.ts
+            - Tests in tests/
+            Create a pull request with your implementation.
+
+      - name: Claude Implement (API Key)
+        if: ${{ secrets.CLAUDE_ACCESS_TOKEN == '' && secrets.ANTHROPIC_API_KEY != '' }}
+        uses: anthropics/claude-code-action@v1
+        with:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Implement the changes described in this issue.
+            Follow existing patterns in the codebase:
+            - Pydantic v2 models in src/models/
+            - SQLAlchemy tables in src/db/tables.py
+            - Drizzle schema in app/db/schema.ts
+            - Tests in tests/
+            Create a pull request with your implementation.

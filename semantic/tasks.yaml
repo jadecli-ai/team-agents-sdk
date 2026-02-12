@@ -1,0 +1,161 @@
+name: tasks
+title: "Agent Tasks"
+description: "Task tracking for multi-agent team runs"
+sql_table: public.tasks
+public: true
+data_source: neon
+
+columns:
+  id:
+    type: uuid
+    primary_key: true
+    default: gen_random_uuid()
+    title: "Task ID"
+    description: "Unique task identifier"
+
+  title:
+    type: varchar(200)
+    nullable: false
+    title: "Task Title"
+    description: "Short imperative task title"
+    validators:
+      - min_length: 1
+
+  description:
+    type: text
+    nullable: true
+    title: "Description"
+    description: "Detailed task description"
+
+  status:
+    type: varchar(20)
+    nullable: false
+    default: "pending"
+    enum: TaskStatus
+    description: "Current lifecycle status"
+
+  priority:
+    type: varchar(20)
+    nullable: false
+    default: "medium"
+    enum: TaskPriority
+    description: "Task priority level"
+
+  assigned_agent:
+    type: varchar(30)
+    nullable: true
+    enum: AgentRole
+    description: "Agent role assigned to this task"
+
+  session_id:
+    type: varchar(100)
+    nullable: true
+    description: "Claude Agent SDK session ID"
+
+  estimated_cost_usd:
+    type: float
+    nullable: false
+    default: 0.0
+    validators:
+      - ge: 0
+
+  actual_cost_usd:
+    type: float
+    nullable: false
+    default: 0.0
+    validators:
+      - ge: 0
+
+  started_at:
+    type: timestamptz
+    nullable: true
+
+  completed_at:
+    type: timestamptz
+    nullable: true
+
+  due_at:
+    type: timestamptz
+    nullable: true
+
+  github_issue_number:
+    type: integer
+    nullable: true
+    validators:
+      - ge: 1
+
+  github_project_item_id:
+    type: varchar(50)
+    nullable: true
+
+  schema_version:
+    type: integer
+    nullable: false
+    default: 1
+
+  created_at:
+    type: timestamptz
+    nullable: false
+    server_default: now()
+
+  updated_at:
+    type: timestamptz
+    nullable: false
+    server_default: now()
+
+dimensions:
+  - name: status
+    sql: "{TABLE}.status"
+    type: string
+    title: "Status"
+  - name: priority
+    sql: "{TABLE}.priority"
+    type: string
+    title: "Priority"
+  - name: assigned_agent
+    sql: "{TABLE}.assigned_agent"
+    type: string
+    title: "Assigned Agent"
+  - name: created_date
+    sql: "{TABLE}.created_at"
+    type: time
+    granularities: [day, week, month]
+
+measures:
+  - name: task_count
+    sql: "COUNT(*)"
+    type: count
+    title: "Total Tasks"
+  - name: total_cost
+    sql: "SUM({TABLE}.actual_cost_usd)"
+    type: sum
+    format: currency
+    title: "Total Cost"
+  - name: avg_cost
+    sql: "AVG({TABLE}.actual_cost_usd)"
+    type: avg
+    format: currency
+    title: "Average Cost"
+
+joins:
+  - name: subtasks
+    relationship: one_to_many
+    sql: "{tasks}.id = {subtasks}.parent_task_id"
+  - name: task_dependencies
+    relationship: one_to_many
+    sql: "{tasks}.id = {task_dependencies}.blocked_task_id"
+
+indexes:
+  - columns: [status]
+  - columns: [priority]
+  - columns: [assigned_agent]
+
+model_validators:
+  - name: completed_must_have_timestamp
+    condition: "status == 'completed'"
+    requires: "completed_at is not None"
+    message: "Completed tasks must have completed_at set"
+  - name: in_progress_must_have_started
+    condition: "status == 'in_progress'"
+    requires: "started_at is not None"
+    message: "In-progress tasks must have started_at set"

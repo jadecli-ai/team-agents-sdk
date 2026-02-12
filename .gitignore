@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+
+# Node
+node_modules/
+.npm
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment (never commit actual values)
+.env
+.env.local
+.env.*.local
+
+# DO commit the template (it has no values)
+!env.template
+
+# Next.js
+.next/
+out/
+
+# Drizzle
+drizzle/
+
+# MLflow
+mlruns/
+mlartifacts/
+mlflow.db
+
+# Crawl cache (large, per-user)
+crawl-cache/

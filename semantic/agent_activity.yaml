@@ -1,0 +1,134 @@
+name: agent_activity
+title: "Agent Activity"
+description: "Hook event log capturing agent tool use, cost, and timing"
+sql_table: public.agent_activity
+public: true
+data_source: neon
+
+columns:
+  id:
+    type: uuid
+    primary_key: true
+    default: gen_random_uuid()
+    title: "Activity ID"
+
+  task_id:
+    type: uuid
+    nullable: true
+    foreign_key: tasks.id
+    on_delete: SET NULL
+    description: "Associated task (if any)"
+
+  subtask_id:
+    type: uuid
+    nullable: true
+    foreign_key: subtasks.id
+    on_delete: SET NULL
+    description: "Associated subtask (if any)"
+
+  agent_name:
+    type: varchar(50)
+    nullable: false
+    description: "Name of the agent (e.g. code-reviewer, team-lead)"
+
+  agent_role:
+    type: varchar(30)
+    nullable: true
+    enum: AgentRole
+    description: "Role of the agent"
+
+  session_id:
+    type: varchar(100)
+    nullable: true
+    description: "Claude Agent SDK session ID"
+
+  hook_event:
+    type: varchar(20)
+    nullable: false
+    description: "Event type: PreToolUse, PostToolUse, SubagentStop, Stop"
+
+  tool_name:
+    type: varchar(50)
+    nullable: true
+    description: "Name of the tool being used (for tool events)"
+
+  tool_input_summary:
+    type: varchar(2000)
+    nullable: true
+    description: "Truncated summary of tool input"
+
+  tool_response_summary:
+    type: varchar(2000)
+    nullable: true
+    description: "Truncated summary of tool response"
+
+  duration_ms:
+    type: integer
+    nullable: true
+    validators:
+      - ge: 0
+    description: "Duration of the operation in milliseconds"
+
+  cost_usd:
+    type: float
+    nullable: true
+    validators:
+      - ge: 0
+    description: "Cost of this operation in USD"
+
+  num_turns:
+    type: integer
+    nullable: true
+    validators:
+      - ge: 0
+    description: "Number of conversation turns (for SubagentStop/Stop)"
+
+  event_at:
+    type: timestamptz
+    nullable: false
+    server_default: now()
+    description: "When this event occurred"
+
+  created_at:
+    type: timestamptz
+    nullable: false
+    server_default: now()
+
+dimensions:
+  - name: agent_name
+    sql: "{TABLE}.agent_name"
+    type: string
+    title: "Agent"
+  - name: hook_event
+    sql: "{TABLE}.hook_event"
+    type: string
+    title: "Event"
+  - name: tool_name
+    sql: "{TABLE}.tool_name"
+    type: string
+    title: "Tool"
+  - name: event_date
+    sql: "{TABLE}.event_at"
+    type: time
+    granularities: [hour, day, week]
+
+measures:
+  - name: event_count
+    sql: "COUNT(*)"
+    type: count
+    title: "Total Events"
+  - name: total_cost
+    sql: "SUM({TABLE}.cost_usd)"
+    type: sum
+    format: currency
+    title: "Total Cost"
+  - name: avg_duration
+    sql: "AVG({TABLE}.duration_ms)"
+    type: avg
+    title: "Avg Duration (ms)"
+
+indexes:
+  - columns: [task_id]
+  - columns: [agent_name]
+  - columns: [hook_event]
+  - columns: [event_at]

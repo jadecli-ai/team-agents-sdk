@@ -1,0 +1,123 @@
+# Neon Database Branching per PR
+# - PR opened/reopened → create Neon branch + run migrations
+# - PR synchronized → schema diff comment
+# - PR closed → delete Neon branch
+#
+# Required secrets:
+#   NEON_API_KEY        — Neon API key (org-level)
+#   NEON_PROJECT_ID     — Neon project ID
+
+name: Neon Branch
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+env:
+  NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+  NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+
+jobs:
+  # ── Create branch on PR open ──────────────────────────────────────
+  create-branch:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    outputs:
+      branch_id: ${{ steps.create.outputs.branch_id }}
+      db_url: ${{ steps.create.outputs.db_url }}
+      host: ${{ steps.create.outputs.host }}
+    steps:
+      - name: Create Neon branch
+        id: create
+        uses: neondatabase/create-branch-action@v5
+        with:
+          project_id: ${{ env.NEON_PROJECT_ID }}
+          branch_name: pr-${{ github.event.number }}
+          api_key: ${{ env.NEON_API_KEY }}
+
+      - name: Comment branch URL
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `### 🗄️ Neon Branch Created
+
+            | | |
+            |---|---|
+            | **Branch** | \`pr-${{ github.event.number }}\` |
+            | **Host** | \`${{ steps.create.outputs.host }}\` |
+
+            This branch will be deleted when the PR is closed.`;
+
+            // Find existing comment to update
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.data.find(c => c.body.includes('Neon Branch Created'));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  # ── Run migrations on the branch ──────────────────────────────────
+  migrate:
+    needs: create-branch
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install deps
+        run: uv pip install -e ".[dev]" --system
+
+      - name: Run Alembic migrations
+        env:
+          PRJ_NEON_DATABASE_URL: ${{ needs.create-branch.outputs.db_url }}
+        run: alembic upgrade head
+
+  # ── Schema diff comment ────────────────────────────────────────────
+  schema-diff:
+    needs: [create-branch, migrate]
+    if: github.event.action == 'synchronize' || github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Schema diff
+        uses: neondatabase/schema-diff-action@v1
+        with:
+          project_id: ${{ env.NEON_PROJECT_ID }}
+          compare_branch: pr-${{ github.event.number }}
+          api_key: ${{ env.NEON_API_KEY }}
+          database: neondb
+
+  # ── Delete branch on PR close ──────────────────────────────────────
+  delete-branch:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete Neon branch
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ env.NEON_PROJECT_ID }}
+          branch: pr-${{ github.event.number }}
+          api_key: ${{ env.NEON_API_KEY }}
