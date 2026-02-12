@@ -1,0 +1,65 @@
+# Auto-update ARCHITECTURE.html on every PR and release
+name: Architecture
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "app/**"
+      - "lib/**"
+      - "semantic/**"
+      - "scripts/**"
+      - "pyproject.toml"
+      - "package.json"
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "app/**"
+      - "lib/**"
+      - "semantic/**"
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-architecture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install deps
+        run: pip install pyyaml
+
+      - name: Generate ARCHITECTURE.html
+        run: python scripts/gen_architecture.py
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet ARCHITECTURE.html 2>/dev/null; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit updated architecture
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ARCHITECTURE.html
+          git commit -m "chore(docs): auto-update ARCHITECTURE.html [skip ci]"
+          git push

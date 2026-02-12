@@ -192,17 +192,36 @@ chore(deps): bump claude-agent-sdk to 0.2.0
 test(crud): add live Neon round-trip for increment
 ```
 
-## Automated Changelog
+## Automated Changelog (release-please)
 
-Changelog is generated from conventional commits. The CI pipeline:
+Uses [release-please](https://github.com/googleapis/release-please) (same as Anthropic SDKs):
 
-1. Parses commit messages since last tag
-2. Groups by type (Features, Fixes, Breaking Changes)
-3. Bumps version in `pyproject.toml` based on highest semver type
-4. Generates `CHANGELOG.md` entry
-5. Creates git tag `v{version}`
+- `.release-please-manifest.json` — tracks current version
+- `release-please-config.json` — changelog sections, version bump rules
+- `.github/workflows/release.yml` — creates release PR on every push to main
 
-To preview: `git log --oneline $(git describe --tags --abbrev=0)..HEAD`
+On conventional commit push to main:
+1. release-please opens/updates a "Release PR" with bumped version + CHANGELOG.md
+2. Merging the Release PR creates a GitHub Release + git tag `v{version}`
+3. Version auto-bumps in `pyproject.toml` and `package.json`
+
+To preview: `git log --oneline $(git describe --tags --abbrev=0 2>/dev/null)..HEAD`
+
+## Architecture Visualization
+
+Interactive HTML diagram auto-generated from codebase:
+
+```bash
+make architecture       # Generate ARCHITECTURE.html (42 files, 54 edges)
+make architecture-check # Verify it's not stale
+```
+
+- Shows backend, frontend, middleware, schema, test, infra, CI layers
+- Click any node to see its dependencies and dependents
+- Filter by layer using toolbar buttons
+- External services (Neon, Vercel, GitHub, Claude SDK, MLflow) shown on right
+- **Auto-updated on every PR and release** via `.github/workflows/architecture.yml`
+- PR CI commits the updated HTML automatically — architecture is always current
 
 ## Neon Branching Workflow
 
@@ -258,6 +277,8 @@ When an MLflow trace reveals a bug or anti-pattern, add it here so it's never re
 | `make db-seed` | Seed sample data |
 | `make codegen` | YAML → Drizzle schema |
 | `make codegen-check` | Validate YAML consistency |
+| `make architecture` | Generate interactive ARCHITECTURE.html |
+| `make architecture-check` | Verify ARCHITECTURE.html is current |
 | `make apps-setup` | Run all GitHub App install scripts |
 | `make claude-sync` | Sync Claude OAuth tokens to secrets |
 | `make sync-github` | Sync tasks → GitHub Issues + Project |

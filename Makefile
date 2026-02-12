@@ -19,7 +19,7 @@ SHELL := /bin/bash
 .PHONY: help install install-py install-node test lint build dev deploy \
         setup setup-auth setup-env claude-sync apps-setup \
         db-branch db-migrate db-promote db-diff db-seed db-reset db-status \
-        codegen clean
+        codegen architecture clean
 
 # ── Config ────────────────────────────────────────────────────────────
 PROJECT_DIR := $(shell pwd)
@@ -117,6 +117,13 @@ codegen: ## Generate Drizzle schema from semantic YAML
 
 codegen-check: ## Validate semantic YAML (no writes)
 	$(PY) scripts/codegen.py --check
+
+architecture: ## Generate interactive ARCHITECTURE.html from codebase
+	$(PY) scripts/gen_architecture.py
+	@echo "✓ ARCHITECTURE.html generated"
+
+architecture-check: ## Check if ARCHITECTURE.html is stale
+	$(PY) scripts/gen_architecture.py --check
 
 # ── Build & Dev ───────────────────────────────────────────────────────
 build: ## Build Next.js for production

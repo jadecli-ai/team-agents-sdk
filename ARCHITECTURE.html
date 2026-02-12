@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architecture — jadecli-ai/team-agents-sdk</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #e2e8f0; --muted: #94a3b8;
+    --schema: #f59e0b; --backend: #3b82f6; --middleware: #8b5cf6;
+    --frontend: #10b981; --test: #6b7280; --infra: #ef4444;
+    --ci: #ec4899; --external: #06b6d4;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'SF Mono', 'Fira Code', monospace; background: var(--bg); color: var(--text); }
+  .header {
+    padding: 1.5rem 2rem; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .header h1 { font-size: 1.1rem; font-weight: 600; }
+  .header .meta { color: var(--muted); font-size: 0.75rem; }
+  .controls {
+    padding: 1rem 2rem; border-bottom: 1px solid var(--border);
+    display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;
+  }
+  .controls button {
+    padding: 0.35rem 0.75rem; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface); color: var(--text); cursor: pointer;
+    font-family: inherit; font-size: 0.75rem; transition: all 0.15s;
+  }
+  .controls button:hover { border-color: var(--text); }
+  .controls button.active { border-color: currentColor; font-weight: 700; }
+  .controls .sep { width: 1px; height: 1.5rem; background: var(--border); margin: 0 0.5rem; }
+  .main { display: flex; height: calc(100vh - 120px); }
+  .sidebar {
+    width: 280px; border-right: 1px solid var(--border); overflow-y: auto; padding: 1rem;
+    flex-shrink: 0;
+  }
+  .sidebar h3 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin: 1rem 0 0.5rem; }
+  .sidebar .file {
+    padding: 0.3rem 0.5rem; border-radius: 3px; cursor: pointer;
+    font-size: 0.72rem; display: flex; align-items: center; gap: 0.4rem;
+    transition: background 0.1s;
+  }
+  .sidebar .file:hover { background: var(--surface); }
+  .sidebar .file.selected { background: var(--surface); font-weight: 700; }
+  .sidebar .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .canvas { flex: 1; position: relative; overflow: hidden; }
+  svg { width: 100%; height: 100%; }
+  .node { cursor: pointer; transition: opacity 0.2s; }
+  .node rect { rx: 4; stroke-width: 1.5; transition: all 0.15s; }
+  .node:hover rect { stroke-width: 2.5; filter: brightness(1.2); }
+  .node text { fill: var(--text); font-size: 10px; font-family: inherit; pointer-events: none; }
+  .edge { stroke-width: 1; opacity: 0.3; fill: none; transition: opacity 0.2s; }
+  .edge.highlighted { opacity: 0.9; stroke-width: 2; }
+  .detail {
+    position: absolute; top: 1rem; right: 1rem; width: 320px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 6px; padding: 1rem;
+    font-size: 0.75rem; display: none; z-index: 10;
+  }
+  .detail.visible { display: block; }
+  .detail h4 { font-size: 0.85rem; margin-bottom: 0.5rem; }
+  .detail .label { color: var(--muted); font-size: 0.65rem; text-transform: uppercase; margin-top: 0.75rem; }
+  .detail .dep { padding: 0.15rem 0; cursor: pointer; }
+  .detail .dep:hover { text-decoration: underline; }
+  .detail .badge {
+    display: inline-block; padding: 0.1rem 0.4rem; border-radius: 3px;
+    font-size: 0.65rem; font-weight: 600;
+  }
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 0.5rem; padding: 1rem 2rem; border-bottom: 1px solid var(--border);
+  }
+  .stat { text-align: center; }
+  .stat .num { font-size: 1.5rem; font-weight: 700; }
+  .stat .lbl { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; }
+  .legend { display: flex; gap: 1rem; padding: 0 2rem; align-items: center; }
+  .legend .item { display: flex; align-items: center; gap: 0.3rem; font-size: 0.7rem; }
+  .legend .swatch { width: 10px; height: 10px; border-radius: 2px; }
+  .org-context {
+    padding: 0.75rem 2rem; border-bottom: 1px solid var(--border);
+    font-size: 0.72rem; color: var(--muted);
+    display: flex; gap: 2rem; align-items: center;
+  }
+  .org-context .repo { color: var(--frontend); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>jadecli-ai / team-agents-sdk</h1>
+  <div class="meta" id="meta"></div>
+</div>
+
+<div class="org-context">
+  <span>Org: <strong>jadecli-ai</strong></span>
+  <span class="repo">team-agents-sdk</span>
+  <span>Semantic YAML &rarr; Pydantic + Drizzle &rarr; Neon Postgres &rarr; Vercel Dashboard</span>
+</div>
+
+<div class="stats" id="stats"></div>
+
+<div class="controls" id="controls">
+  <button class="active" data-layer="all">All</button>
+  <div class="sep"></div>
+</div>
+
+<div class="main">
+  <div class="sidebar" id="sidebar"></div>
+  <div class="canvas">
+    <svg id="graph"></svg>
+    <div class="detail" id="detail"></div>
+  </div>
+</div>
+
+<script>
+const DATA = {
+  "generated_at": "2026-02-12T02:29:32.684593+00:00",
+  "version": "0.1.0",
+  "org": "jadecli-ai",
+  "repo": "team-agents-sdk",
+  "nodes": [
+    {
+      "id": ".github/workflows/architecture.yml",
+      "layer": "ci",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": ".github/workflows/ci.yml",
+      "layer": "ci",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": ".github/workflows/claude.yml",
+      "layer": "ci",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": ".github/workflows/coderabbit.yml",
+      "layer": "ci",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": ".github/workflows/neon-branch.yml",
+      "layer": "ci",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": ".github/workflows/release.yml",
+      "layer": "ci",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "app/db/schema.ts",
+      "layer": "frontend",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "app/layout.tsx",
+      "layer": "frontend",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "app/page.tsx",
+      "layer": "frontend",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "lib/db.ts",
+      "layer": "frontend",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "scripts/codegen.py",
+      "layer": "infra",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "scripts/gen_architecture.py",
+      "layer": "infra",
+      "semver": "patch",
+      "schema": "#f59e0b; --backend: #3b82f6; --middleware: #8b5cf6;"
+    },
+    {
+      "id": "scripts/seed_db.py",
+      "layer": "infra",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "scripts/sync_github.py",
+      "layer": "infra",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "semantic/_enums.yaml",
+      "layer": "schema",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "semantic/agent_activity.yaml",
+      "layer": "schema",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "semantic/subtasks.yaml",
+      "layer": "schema",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "semantic/task_dependencies.yaml",
+      "layer": "schema",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "semantic/tasks.yaml",
+      "layer": "schema",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "src/__init__.py",
+      "layer": "backend",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "src/db/__init__.py",
+      "layer": "backend",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "src/db/alembic/env.py",
+      "layer": "backend",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "src/db/crud.py",
+      "layer": "backend",
+      "semver": "minor",
+      "schema": null
+    },
+    {
+      "id": "src/db/engine.py",
+      "layer": "backend",
+      "semver": "major",
+      "schema": null
+    },
+    {
+      "id": "src/db/tables.py",
+      "layer": "backend",
+      "semver": "major",
+      "schema": "tasks, subtasks, task_dependencies, agent_activity"
+    },
+    {
+      "id": "src/get_env.py",
+      "layer": "backend",
+      "semver": "major",
+      "schema": null
+    },
+    {
+      "id": "src/hooks/__init__.py",
+      "layer": "middleware",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "src/hooks/activity_tracker.py",
+      "layer": "middleware",
+      "semver": "minor",
+      "schema": null
+    },
+    {
+      "id": "src/hooks/cost_tracker.py",
+      "layer": "middleware",
+      "semver": "patch",
+      "schema": null
+    },
+    {
+      "id": "src/models/__init__.py",
+      "layer": "backend",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "src/models/agent_activity.py",
+      "layer": "backend",
+      "semver": "minor",
+      "schema": "agent_activity"
+    },
+    {
+      "id": "src/models/base.py",
+      "layer": "backend",
+      "semver": "major",
+      "schema": null
+    },
+    {
+      "id": "src/models/enums.py",
+      "layer": "backend",
+      "semver": "major",
+      "schema": "_enums"
+    },
+    {
+      "id": "src/models/subtask.py",
+      "layer": "backend",
+      "semver": "minor",
+      "schema": "subtasks"
+    },
+    {
+      "id": "src/models/task.py",
+      "layer": "backend",
+      "semver": "minor",
+      "schema": "tasks"
+    },
+    {
+      "id": "src/sync/__init__.py",
+      "layer": "middleware",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "src/sync/github_project.py",
+      "layer": "middleware",
+      "semver": "minor",
+      "schema": null
+    },
+    {
+      "id": "tests/__init__.py",
+      "layer": "test",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "tests/test_crud.py",
+      "layer": "test",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "tests/test_db.py",
+      "layer": "test",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "tests/test_hooks.py",
+      "layer": "test",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "tests/test_models.py",
+      "layer": "test",
+      "semver": null,
+      "schema": null
+    }
+  ],
+  "services": [
+    {
+      "id": "Neon Postgres",
+      "layer": "external"
+    },
+    {
+      "id": "Vercel",
+      "layer": "external"
+    },
+    {
+      "id": "GitHub API",
+      "layer": "external"
+    },
+    {
+      "id": "Claude Agent SDK",
+      "layer": "external"
+    },
+    {
+      "id": "MLflow",
+      "layer": "external"
+    }
+  ],
+  "edges": [
+    {
+      "source": "lib/db.ts",
+      "target": "app/page.tsx",
+      "type": "import"
+    },
+    {
+      "source": "app/db/schema.ts",
+      "target": "app/page.tsx",
+      "type": "import"
+    },
+    {
+      "source": "app/db/schema.ts",
+      "target": "lib/db.ts",
+      "type": "import"
+    },
+    {
+      "source": "semantic/*.yaml",
+      "target": "scripts/gen_architecture.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/**/*.py",
+      "target": "scripts/gen_architecture.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "app/**/*.ts, app/**/*.tsx",
+      "target": "scripts/gen_architecture.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "lib/**/*.ts",
+      "target": "scripts/gen_architecture.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/db/engine.py",
+      "target": "scripts/seed_db.py",
+      "type": "import"
+    },
+    {
+      "source": "src/db/tables.py",
+      "target": "scripts/seed_db.py",
+      "type": "import"
+    },
+    {
+      "source": "src/db/engine.py",
+      "target": "scripts/sync_github.py",
+      "type": "import"
+    },
+    {
+      "source": "src/db/tables.py",
+      "target": "scripts/sync_github.py",
+      "type": "import"
+    },
+    {
+      "source": "src/sync/github_project.py",
+      "target": "scripts/sync_github.py",
+      "type": "import"
+    },
+    {
+      "source": "src/db/crud.py",
+      "target": "src/db/__init__.py",
+      "type": "import"
+    },
+    {
+      "source": "src/db/engine.py",
+      "target": "src/db/__init__.py",
+      "type": "import"
+    },
+    {
+      "source": "src/db/tables.py",
+      "target": "src/db/__init__.py",
+      "type": "import"
+    },
+    {
+      "source": "src/db/tables.py",
+      "target": "src/db/alembic/env.py",
+      "type": "import"
+    },
+    {
+      "source": "src/get_env.py",
+      "target": "src/db/alembic/env.py",
+      "type": "import"
+    },
+    {
+      "source": "src/db/engine.py",
+      "target": "src/db/crud.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/db/crud.py",
+      "target": "src/db/crud.py",
+      "type": "import"
+    },
+    {
+      "source": "src/db/tables.py",
+      "target": "src/db/crud.py",
+      "type": "import"
+    },
+    {
+      "source": "src/get_env.py",
+      "target": "src/db/engine.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "semantic/tasks.yaml",
+      "target": "src/db/tables.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "semantic/subtasks.yaml",
+      "target": "src/db/tables.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "semantic/task_dependencies.yaml",
+      "target": "src/db/tables.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "semantic/agent_activity.yaml",
+      "target": "src/db/tables.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "env.template",
+      "target": "src/get_env.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/get_env.py",
+      "target": "src/get_env.py",
+      "type": "import"
+    },
+    {
+      "source": "src/hooks/activity_tracker.py",
+      "target": "src/hooks/__init__.py",
+      "type": "import"
+    },
+    {
+      "source": "src/hooks/cost_tracker.py",
+      "target": "src/hooks/__init__.py",
+      "type": "import"
+    },
+    {
+      "source": "src/db/engine.py",
+      "target": "src/hooks/activity_tracker.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/db/tables.py",
+      "target": "src/hooks/activity_tracker.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/db/crud.py",
+      "target": "src/hooks/cost_tracker.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/db/tables.py",
+      "target": "src/hooks/cost_tracker.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/models/enums.py",
+      "target": "src/models/__init__.py",
+      "type": "import"
+    },
+    {
+      "source": "src/models/base.py",
+      "target": "src/models/__init__.py",
+      "type": "import"
+    },
+    {
+      "source": "src/models/task.py",
+      "target": "src/models/__init__.py",
+      "type": "import"
+    },
+    {
+      "source": "src/models/subtask.py",
+      "target": "src/models/__init__.py",
+      "type": "import"
+    },
+    {
+      "source": "src/models/agent_activity.py",
+      "target": "src/models/__init__.py",
+      "type": "import"
+    },
+    {
+      "source": "src/models/base.py",
+      "target": "src/models/agent_activity.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/models/enums.py",
+      "target": "src/models/agent_activity.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/models/base.py",
+      "target": "src/models/subtask.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/models/enums.py",
+      "target": "src/models/subtask.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/models/base.py",
+      "target": "src/models/task.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/models/enums.py",
+      "target": "src/models/task.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/get_env.py",
+      "target": "src/sync/github_project.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/db/engine.py",
+      "target": "src/sync/github_project.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/db/tables.py",
+      "target": "src/sync/github_project.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/models/enums.py",
+      "target": "src/sync/github_project.py",
+      "type": "import"
+    },
+    {
+      "source": "src/db/crud.py",
+      "target": "tests/test_crud.py",
+      "type": "import"
+    },
+    {
+      "source": "src/db/tables.py",
+      "target": "tests/test_crud.py",
+      "type": "import"
+    },
+    {
+      "source": "src/db/engine.py",
+      "target": "tests/test_db.py",
+      "type": "import"
+    },
+    {
+      "source": "src/db/tables.py",
+      "target": "tests/test_db.py",
+      "type": "import"
+    },
+    {
+      "source": "src/hooks/activity_tracker.py",
+      "target": "tests/test_hooks.py",
+      "type": "import"
+    },
+    {
+      "source": "src/hooks/cost_tracker.py",
+      "target": "tests/test_hooks.py",
+      "type": "import"
+    }
+  ],
+  "layers": {
+    "schema": "#f59e0b",
+    "backend": "#3b82f6",
+    "middleware": "#8b5cf6",
+    "frontend": "#10b981",
+    "test": "#6b7280",
+    "infra": "#ef4444",
+    "ci": "#ec4899",
+    "other": "#9ca3af"
+  },
+  "layer_order": [
+    "schema",
+    "backend",
+    "middleware",
+    "frontend",
+    "test",
+    "infra",
+    "ci"
+  ],
+  "stats": {
+    "total_files": 42,
+    "total_edges": 54,
+    "by_layer": {
+      "schema": 5,
+      "backend": 13,
+      "middleware": 5,
+      "frontend": 4,
+      "test": 5,
+      "infra": 4,
+      "ci": 6
+    }
+  }
+};
+
+// ── Render metadata ───────────────────────────────────────────────
+document.getElementById('meta').textContent =
+  `v${DATA.version} | Generated ${new Date(DATA.generated_at).toLocaleDateString()} | ${DATA.stats.total_files} files, ${DATA.stats.total_edges} edges`;
+
+// ── Stats ─────────────────────────────────────────────────────────
+const statsEl = document.getElementById('stats');
+for (const [layer, count] of Object.entries(DATA.stats.by_layer)) {
+  if (count === 0) continue;
+  const div = document.createElement('div');
+  div.className = 'stat';
+  div.innerHTML = `<div class="num" style="color: ${DATA.layers[layer]}">${count}</div><div class="lbl">${layer}</div>`;
+  statsEl.appendChild(div);
+}
+
+// ── Controls (layer filters) ──────────────────────────────────────
+const controlsEl = document.getElementById('controls');
+for (const layer of DATA.layer_order) {
+  if (!DATA.stats.by_layer[layer]) continue;
+  const btn = document.createElement('button');
+  btn.dataset.layer = layer;
+  btn.style.color = DATA.layers[layer];
+  btn.textContent = layer;
+  btn.onclick = () => filterLayer(layer);
+  controlsEl.appendChild(btn);
+}
+
+let activeLayer = 'all';
+function filterLayer(layer) {
+  activeLayer = activeLayer === layer ? 'all' : layer;
+  controlsEl.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('active', b.dataset.layer === activeLayer);
+  });
+  renderGraph();
+  renderSidebar();
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────
+const sidebarEl = document.getElementById('sidebar');
+let selectedNode = null;
+
+function renderSidebar() {
+  sidebarEl.innerHTML = '';
+  const grouped = {};
+  for (const n of DATA.nodes) {
+    if (activeLayer !== 'all' && n.layer !== activeLayer) continue;
+    (grouped[n.layer] = grouped[n.layer] || []).push(n);
+  }
+  for (const layer of DATA.layer_order) {
+    if (!grouped[layer]) continue;
+    const h3 = document.createElement('h3');
+    h3.textContent = `${layer} (${grouped[layer].length})`;
+    h3.style.color = DATA.layers[layer];
+    sidebarEl.appendChild(h3);
+    for (const n of grouped[layer]) {
+      const div = document.createElement('div');
+      div.className = 'file' + (selectedNode === n.id ? ' selected' : '');
+      div.innerHTML = `<span class="dot" style="background:${DATA.layers[n.layer]}"></span>${n.id.split('/').pop()}`;
+      div.title = n.id;
+      div.onclick = () => selectNode(n.id);
+      sidebarEl.appendChild(div);
+    }
+  }
+}
+
+// ── Detail panel ──────────────────────────────────────────────────
+const detailEl = document.getElementById('detail');
+
+function selectNode(id) {
+  selectedNode = selectedNode === id ? null : id;
+  renderSidebar();
+  renderGraph();
+  if (!selectedNode) {
+    detailEl.classList.remove('visible');
+    return;
+  }
+  const node = DATA.nodes.find(n => n.id === id);
+  if (!node) return;
+
+  const incoming = DATA.edges.filter(e => e.target === id).map(e => e.source);
+  const outgoing = DATA.edges.filter(e => e.source === id).map(e => e.target);
+
+  let html = `<h4>${id}</h4>`;
+  html += `<span class="badge" style="background:${DATA.layers[node.layer]}33;color:${DATA.layers[node.layer]}">${node.layer}</span>`;
+  if (node.semver) html += ` <span class="badge" style="background:#33415533;color:var(--muted)">${node.semver}</span>`;
+  if (node.schema) html += `<div class="label">Schema</div><div>${node.schema}</div>`;
+  if (incoming.length) {
+    html += `<div class="label">Depends on (${incoming.length})</div>`;
+    incoming.forEach(d => html += `<div class="dep" onclick="selectNode('${d}')">${d}</div>`);
+  }
+  if (outgoing.length) {
+    html += `<div class="label">Depended by (${outgoing.length})</div>`;
+    outgoing.forEach(d => html += `<div class="dep" onclick="selectNode('${d}')">${d}</div>`);
+  }
+  detailEl.innerHTML = html;
+  detailEl.classList.add('visible');
+}
+
+// ── Graph rendering (force-directed) ──────────────────────────────
+const svg = document.getElementById('graph');
+const ns = 'http://www.w3.org/2000/svg';
+
+function renderGraph() {
+  svg.innerHTML = '';
+  const rect = svg.getBoundingClientRect();
+  const W = rect.width, H = rect.height;
+
+  const visibleNodes = DATA.nodes.filter(n =>
+    activeLayer === 'all' || n.layer === activeLayer
+  );
+  const visibleIds = new Set(visibleNodes.map(n => n.id));
+  const visibleEdges = DATA.edges.filter(e =>
+    visibleIds.has(e.source) && visibleIds.has(e.target)
+  );
+
+  // Layout: group by layer in horizontal bands
+  const layerNodes = {};
+  visibleNodes.forEach(n => (layerNodes[n.layer] = layerNodes[n.layer] || []).push(n));
+
+  const positions = {};
+  const activeLayers = DATA.layer_order.filter(l => layerNodes[l]);
+  const bandH = H / (activeLayers.length + 1);
+
+  activeLayers.forEach((layer, li) => {
+    const nodes = layerNodes[layer];
+    const bandW = W / (nodes.length + 1);
+    nodes.forEach((n, ni) => {
+      positions[n.id] = {
+        x: bandW * (ni + 1),
+        y: bandH * (li + 1),
+      };
+    });
+  });
+
+  // Add service nodes along the right
+  DATA.services.forEach((s, i) => {
+    positions[s.id] = { x: W - 80, y: 60 + i * 50 };
+  });
+
+  // Draw edges
+  const edgeGroup = document.createElementNS(ns, 'g');
+  visibleEdges.forEach(e => {
+    const s = positions[e.source], t = positions[e.target];
+    if (!s || !t) return;
+    const line = document.createElementNS(ns, 'line');
+    line.setAttribute('x1', s.x); line.setAttribute('y1', s.y);
+    line.setAttribute('x2', t.x); line.setAttribute('y2', t.y);
+    line.setAttribute('class', 'edge');
+    line.setAttribute('stroke', DATA.layers[visibleNodes.find(n => n.id === e.source)?.layer] || '#666');
+    line.dataset.source = e.source;
+    line.dataset.target = e.target;
+    if (selectedNode && (e.source === selectedNode || e.target === selectedNode)) {
+      line.classList.add('highlighted');
+    }
+    edgeGroup.appendChild(line);
+  });
+  svg.appendChild(edgeGroup);
+
+  // Draw nodes
+  const nodeGroup = document.createElementNS(ns, 'g');
+  visibleNodes.forEach(n => {
+    const pos = positions[n.id];
+    if (!pos) return;
+    const g = document.createElementNS(ns, 'g');
+    g.setAttribute('class', 'node');
+    g.setAttribute('transform', `translate(${pos.x - 60},${pos.y - 12})`);
+    g.onclick = () => selectNode(n.id);
+
+    const r = document.createElementNS(ns, 'rect');
+    const label = n.id.split('/').pop();
+    const w = Math.max(label.length * 6.5 + 16, 80);
+    r.setAttribute('width', w); r.setAttribute('height', 24);
+    r.setAttribute('fill', DATA.layers[n.layer] + '22');
+    r.setAttribute('stroke', DATA.layers[n.layer]);
+    if (selectedNode === n.id) {
+      r.setAttribute('stroke-width', '3');
+      r.setAttribute('fill', DATA.layers[n.layer] + '44');
+    }
+    g.appendChild(r);
+
+    const t = document.createElementNS(ns, 'text');
+    t.setAttribute('x', 8); t.setAttribute('y', 16);
+    t.textContent = label;
+    g.appendChild(t);
+
+    nodeGroup.appendChild(g);
+  });
+  svg.appendChild(nodeGroup);
+
+  // Draw service nodes
+  DATA.services.forEach(s => {
+    const pos = positions[s.id];
+    if (!pos) return;
+    const g = document.createElementNS(ns, 'g');
+    g.setAttribute('class', 'node');
+    g.setAttribute('transform', `translate(${pos.x - 50},${pos.y - 12})`);
+
+    const r = document.createElementNS(ns, 'rect');
+    r.setAttribute('width', 100); r.setAttribute('height', 24);
+    r.setAttribute('fill', '#06b6d422'); r.setAttribute('stroke', '#06b6d4');
+    r.setAttribute('stroke-dasharray', '4 2');
+    g.appendChild(r);
+
+    const t = document.createElementNS(ns, 'text');
+    t.setAttribute('x', 8); t.setAttribute('y', 16);
+    t.setAttribute('fill', '#06b6d4');
+    t.textContent = s.id;
+    g.appendChild(t);
+
+    nodeGroup.appendChild(g);
+  });
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+renderSidebar();
+renderGraph();
+window.addEventListener('resize', renderGraph);
+</script>
+</body>
+</html>
