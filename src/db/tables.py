@@ -1,11 +1,12 @@
 """SQLAlchemy Table objects matching semantic YAML schemas.
 
-schema: tasks, subtasks, task_dependencies, agent_activity
+schema: tasks, subtasks, task_dependencies, agent_activity, mlflow_traces
 depends_on:
   - semantic/tasks.yaml
   - semantic/subtasks.yaml
   - semantic/task_dependencies.yaml
   - semantic/agent_activity.yaml
+  - semantic/mlflow_traces.yaml
 depended_by:
   - src/db/crud.py
   - src/db/__init__.py
@@ -169,4 +170,36 @@ agent_activity = sa.Table(
     sa.Index("ix_agent_activity_agent_name", "agent_name"),
     sa.Index("ix_agent_activity_hook_event", "hook_event"),
     sa.Index("ix_agent_activity_event_at", "event_at"),
+)
+
+mlflow_traces = sa.Table(
+    "mlflow_traces",
+    metadata,
+    sa.Column("id", sa.UUID, primary_key=True, server_default=sa.text("gen_random_uuid()")),
+    sa.Column("clone_id", sa.String(50), nullable=False),
+    sa.Column("experiment_name", sa.String(200), nullable=False),
+    sa.Column("run_id", sa.String(64), nullable=False),
+    sa.Column("start_time", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("end_time", sa.DateTime(timezone=True), nullable=True),
+    sa.Column("duration_ms", sa.Integer, nullable=True),
+    sa.Column("status", sa.String(20), nullable=False),
+    sa.Column("total_tokens", sa.Integer, nullable=True),
+    sa.Column("estimated_cost_usd", sa.Float, nullable=True),
+    sa.Column("model_id", sa.String(100), nullable=True),
+    sa.Column(
+        "synced_at",
+        sa.DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.text("now()"),
+    ),
+    sa.Column(
+        "created_at",
+        sa.DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.text("now()"),
+    ),
+    sa.Index("ix_mlflow_traces_clone_id", "clone_id"),
+    sa.UniqueConstraint("run_id", name="uq_mlflow_traces_run_id"),
+    sa.Index("ix_mlflow_traces_experiment_name", "experiment_name"),
+    sa.Index("ix_mlflow_traces_synced_at", "synced_at"),
 )

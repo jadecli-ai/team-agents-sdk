@@ -1,0 +1,599 @@
+#!/usr/bin/env bash
+# Golden WSL2 distro health check — 60+ checks across 10 categories.
+#
+# Usage:
+#   distro-health-check                  # Run all checks
+#   distro-health-check --category gpu   # Run one category
+#   distro-health-check --json           # JSON output
+#   distro-health-check --verbose        # Show check details
+#   distro-health-check --quiet          # Only show failures
+#
+# Exit code = number of failures (max 125).
+set -uo pipefail
+
+# ── Colors ───────────────────────────────────────────────────────────
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# ── State ────────────────────────────────────────────────────────────
+PASS_COUNT=0
+FAIL_COUNT=0
+WARN_COUNT=0
+SKIP_COUNT=0
+VERBOSE=false
+QUIET=false
+JSON_OUT=false
+FILTER_CATEGORY=""
+RESULTS=()
+
+# ── Parse args ───────────────────────────────────────────────────────
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --category) FILTER_CATEGORY="$2"; shift 2 ;;
+        --json)     JSON_OUT=true; shift ;;
+        --verbose)  VERBOSE=true; shift ;;
+        --quiet)    QUIET=true; shift ;;
+        --help|-h)
+            echo "Usage: distro-health-check [--category NAME] [--json] [--verbose] [--quiet]"
+            echo ""
+            echo "Categories: system, network, gpu, tools, mcp, services, docker, tracing, cache, tailscale"
+            exit 0
+            ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
+    esac
+done
+
+# ── Helpers ──────────────────────────────────────────────────────────
+_current_category=""
+
+category() {
+    _current_category="$1"
+    if ! $JSON_OUT && ! $QUIET; then
+        echo -e "\n${BOLD}── $1 ──${NC}"
+    fi
+}
+
+ok() {
+    PASS_COUNT=$((PASS_COUNT + 1))
+    RESULTS+=("{\"category\":\"$_current_category\",\"check\":\"$1\",\"status\":\"ok\",\"detail\":\"${2:-}\"}")
+    if ! $JSON_OUT && ! $QUIET; then
+        echo -e "  ${GREEN}ok${NC}  $1"
+    fi
+}
+
+fail() {
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    RESULTS+=("{\"category\":\"$_current_category\",\"check\":\"$1\",\"status\":\"fail\",\"detail\":\"${2:-}\"}")
+    if ! $JSON_OUT; then
+        echo -e "  ${RED}FAIL${NC}  $1${2:+ — $2}"
+    fi
+}
+
+warn() {
+    WARN_COUNT=$((WARN_COUNT + 1))
+    RESULTS+=("{\"category\":\"$_current_category\",\"check\":\"$1\",\"status\":\"warn\",\"detail\":\"${2:-}\"}")
+    if ! $JSON_OUT && ! $QUIET; then
+        echo -e "  ${YELLOW}warn${NC}  $1${2:+ — $2}"
+    fi
+}
+
+skip() {
+    SKIP_COUNT=$((SKIP_COUNT + 1))
+    RESULTS+=("{\"category\":\"$_current_category\",\"check\":\"$1\",\"status\":\"skip\",\"detail\":\"${2:-}\"}")
+    if ! $JSON_OUT && $VERBOSE; then
+        echo -e "  ${BLUE}skip${NC}  $1${2:+ — $2}"
+    fi
+}
+
+should_run() {
+    [[ -z "$FILTER_CATEGORY" || "$FILTER_CATEGORY" == "$1" ]]
+}
+
+# ── Category: system ─────────────────────────────────────────────────
+check_system() {
+    category "system"
+
+    # systemd running
+    if systemctl is-system-running &>/dev/null; then
+        ok "systemd running"
+    else
+        fail "systemd not running" "WSL requires [boot] systemd=true in /etc/wsl.conf"
+    fi
+
+    # Default user
+    if [[ "$(whoami)" == "org-jadecli" ]]; then
+        ok "default user"
+    else
+        warn "default user" "expected org-jadecli, got $(whoami)"
+    fi
+
+    # Shell
+    if [[ "$SHELL" == */bash || "$SHELL" == */zsh ]]; then
+        ok "shell ($SHELL)"
+    else
+        warn "shell" "unexpected: $SHELL"
+    fi
+
+    # Disk usage
+    local usage
+    usage=$(df / --output=pcent | tail -1 | tr -d ' %')
+    if [[ "$usage" -lt 80 ]]; then
+        ok "disk usage (${usage}%)"
+    elif [[ "$usage" -lt 90 ]]; then
+        warn "disk usage (${usage}%)" "approaching full"
+    else
+        fail "disk usage (${usage}%)" "critically low space"
+    fi
+
+    # sysctl tunings loaded
+    local swappiness
+    swappiness=$(sysctl -n vm.swappiness 2>/dev/null || echo "unknown")
+    if [[ "$swappiness" == "10" ]]; then
+        ok "sysctl tunings loaded (swappiness=$swappiness)"
+    else
+        warn "sysctl tunings" "vm.swappiness=$swappiness (expected 10)"
+    fi
+
+    # DNS resolution
+    if grep -q "nameserver" /etc/resolv.conf 2>/dev/null; then
+        ok "resolv.conf has nameservers"
+    else
+        fail "resolv.conf" "no nameservers configured"
+    fi
+}
+
+# ── Category: network ────────────────────────────────────────────────
+check_network() {
+    category "network"
+
+    # DNS resolution
+    if host -W 3 dns.google &>/dev/null; then
+        ok "DNS resolution"
+    else
+        fail "DNS resolution" "cannot resolve dns.google"
+    fi
+
+    # Connectivity checks
+    local -a endpoints=("github.com" "registry.npmjs.org" "pypi.org" "api.anthropic.com")
+    for ep in "${endpoints[@]}"; do
+        if curl -sfo /dev/null --connect-timeout 5 "https://$ep" 2>/dev/null; then
+            ok "$ep reachable"
+        else
+            fail "$ep" "connection failed"
+        fi
+    done
+
+    # Redis
+    if redis-cli -h localhost ping 2>/dev/null | grep -q PONG; then
+        ok "redis ping"
+    else
+        warn "redis ping" "localhost:6379 not responding"
+    fi
+}
+
+# ── Category: gpu ────────────────────────────────────────────────────
+check_gpu() {
+    category "gpu"
+
+    # nvidia-smi
+    if nvidia-smi &>/dev/null; then
+        local gpu_name
+        gpu_name=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)
+        ok "nvidia-smi ($gpu_name)"
+    else
+        fail "nvidia-smi" "not available"
+        return
+    fi
+
+    # nvcc
+    if nvcc --version &>/dev/null; then
+        local cuda_ver
+        cuda_ver=$(nvcc --version 2>/dev/null | grep "release" | sed 's/.*release //' | sed 's/,.*//')
+        ok "nvcc ($cuda_ver)"
+    else
+        warn "nvcc" "not installed (optional)"
+    fi
+
+    # CUDA in PATH
+    if echo "$PATH" | grep -q cuda; then
+        ok "CUDA in PATH"
+    else
+        warn "CUDA PATH" "/usr/local/cuda/bin not in PATH"
+    fi
+
+    # LD_LIBRARY_PATH
+    if echo "${LD_LIBRARY_PATH:-}" | grep -q cuda; then
+        ok "CUDA in LD_LIBRARY_PATH"
+    else
+        warn "CUDA LD_LIBRARY_PATH" "cuda libs not in LD_LIBRARY_PATH"
+    fi
+
+    # No distro nvcc conflict
+    if dpkg -l nvidia-cuda-toolkit 2>/dev/null | grep -q "^ii"; then
+        fail "distro nvcc conflict" "nvidia-cuda-toolkit installed — remove it (conflicts with CUDA 12.6)"
+    else
+        ok "no distro nvcc conflict"
+    fi
+
+    # GPU model check
+    if nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | grep -qi "rtx"; then
+        ok "RTX GPU detected"
+    else
+        warn "GPU model" "expected RTX series"
+    fi
+}
+
+# ── Category: tools ──────────────────────────────────────────────────
+check_tools() {
+    category "tools"
+
+    local -a required_tools=("python3" "node" "uv" "gh" "jq" "ruff" "git" "docker")
+    for tool in "${required_tools[@]}"; do
+        if command -v "$tool" &>/dev/null; then
+            local ver
+            case "$tool" in
+                python3) ver=$(python3 --version 2>/dev/null | awk '{print $2}') ;;
+                node)    ver=$(node --version 2>/dev/null) ;;
+                uv)      ver=$(uv --version 2>/dev/null | awk '{print $2}') ;;
+                gh)      ver=$(gh --version 2>/dev/null | head -1 | awk '{print $3}') ;;
+                jq)      ver=$(jq --version 2>/dev/null) ;;
+                ruff)    ver=$(ruff --version 2>/dev/null | awk '{print $2}') ;;
+                git)     ver=$(git --version 2>/dev/null | awk '{print $3}') ;;
+                docker)  ver=$(docker --version 2>/dev/null | awk '{print $3}' | tr -d ',') ;;
+                *)       ver="installed" ;;
+            esac
+            ok "$tool ($ver)"
+        else
+            fail "$tool" "not installed"
+        fi
+    done
+
+    # claude CLI (optional)
+    if command -v claude &>/dev/null; then
+        ok "claude CLI"
+    else
+        warn "claude CLI" "not installed"
+    fi
+
+    # docker compose
+    if docker compose version &>/dev/null; then
+        ok "docker compose"
+    else
+        warn "docker compose" "not available"
+    fi
+}
+
+# ── Category: mcp ────────────────────────────────────────────────────
+check_mcp() {
+    category "mcp"
+
+    local -a mcp_deps=("bwrap:bubblewrap" "socat:socat" "rg:ripgrep")
+    for entry in "${mcp_deps[@]}"; do
+        local cmd="${entry%%:*}"
+        local pkg="${entry##*:}"
+        if command -v "$cmd" &>/dev/null; then
+            ok "$pkg"
+        else
+            fail "$pkg" "not installed (required for Claude Code sandbox)"
+        fi
+    done
+
+    # sandbox-runtime
+    if npm list -g @anthropic-ai/sandbox-runtime &>/dev/null; then
+        ok "sandbox-runtime"
+    else
+        warn "sandbox-runtime" "not installed globally"
+    fi
+}
+
+# ── Category: services ───────────────────────────────────────────────
+check_services() {
+    category "services"
+
+    local -a required_services=("docker" "redis-server" "containerd")
+    for svc in "${required_services[@]}"; do
+        if systemctl is-active "$svc" &>/dev/null; then
+            ok "$svc active"
+        elif systemctl is-enabled "$svc" &>/dev/null; then
+            warn "$svc" "enabled but not active"
+        else
+            warn "$svc" "not enabled"
+        fi
+    done
+
+    # systemd-resolved
+    if systemctl is-active systemd-resolved &>/dev/null; then
+        ok "systemd-resolved active"
+    else
+        skip "systemd-resolved" "not running (using resolv.conf directly)"
+    fi
+
+    # cron
+    if systemctl is-active cron &>/dev/null; then
+        ok "cron active"
+    else
+        warn "cron" "not active"
+    fi
+
+    # mlflow-sync timer
+    if systemctl is-active mlflow-sync.timer &>/dev/null; then
+        ok "mlflow-sync.timer active"
+    elif systemctl is-enabled mlflow-sync.timer &>/dev/null; then
+        warn "mlflow-sync.timer" "enabled but not active"
+    else
+        warn "mlflow-sync.timer" "not installed"
+    fi
+}
+
+# ── Category: docker ─────────────────────────────────────────────────
+check_docker() {
+    category "docker"
+
+    # Docker engine
+    if docker info &>/dev/null; then
+        ok "docker engine"
+    else
+        fail "docker engine" "not running or no permission"
+        return
+    fi
+
+    # Docker compose
+    if docker compose version &>/dev/null; then
+        local cv
+        cv=$(docker compose version --short 2>/dev/null)
+        ok "docker compose ($cv)"
+    else
+        warn "docker compose" "not available"
+    fi
+
+    # NVIDIA runtime registered
+    if docker info 2>/dev/null | grep -q nvidia; then
+        ok "nvidia runtime registered"
+    else
+        fail "nvidia runtime" "not found in docker info"
+    fi
+
+    # Default runtime
+    local default_rt
+    default_rt=$(docker info --format '{{.DefaultRuntime}}' 2>/dev/null)
+    if [[ "$default_rt" == "nvidia" ]]; then
+        ok "default runtime (nvidia)"
+    else
+        warn "default runtime" "is '$default_rt', expected 'nvidia'"
+    fi
+
+    # BuildKit
+    if docker info 2>/dev/null | grep -qi "buildkit"; then
+        ok "buildkit enabled"
+    else
+        warn "buildkit" "not detected"
+    fi
+
+    # Log rotation
+    local log_driver
+    log_driver=$(docker info --format '{{.LoggingDriver}}' 2>/dev/null)
+    if [[ "$log_driver" == "json-file" ]]; then
+        ok "log driver ($log_driver)"
+    else
+        warn "log driver" "is '$log_driver', expected 'json-file'"
+    fi
+
+    # Docker model (Docker Desktop feature)
+    if docker model --help &>/dev/null; then
+        ok "docker model available"
+    else
+        skip "docker model" "requires Docker Desktop integration"
+    fi
+}
+
+# ── Category: tracing ────────────────────────────────────────────────
+check_tracing() {
+    category "tracing"
+
+    # mlflow CLI
+    if command -v mlflow &>/dev/null; then
+        local mv
+        mv=$(mlflow --version 2>/dev/null | awk '{print $2}')
+        ok "mlflow CLI ($mv)"
+    else
+        fail "mlflow CLI" "not installed"
+    fi
+
+    # Local MLflow DB
+    if [ -f "$HOME/.mlflow/mlruns.db" ]; then
+        ok "~/.mlflow/mlruns.db exists"
+    else
+        warn "mlruns.db" "not yet created (run agents first)"
+    fi
+
+    # clone.env
+    if [ -f /etc/mlflow/clone.env ]; then
+        ok "/etc/mlflow/clone.env"
+    else
+        warn "clone.env" "not installed at /etc/mlflow/"
+    fi
+
+    # CLONE_ID set
+    local cid=""
+    if [ -f /etc/mlflow/clone.env ]; then
+        cid=$(grep "^CLONE_ID=" /etc/mlflow/clone.env 2>/dev/null | cut -d= -f2)
+    fi
+    if [[ -n "$cid" && "$cid" != "golden" ]]; then
+        ok "CLONE_ID=$cid"
+    elif [[ "$cid" == "golden" ]]; then
+        warn "CLONE_ID" "still set to 'golden' (run clone-init)"
+    else
+        warn "CLONE_ID" "not set"
+    fi
+
+    # sync timer
+    if systemctl is-active mlflow-sync.timer &>/dev/null; then
+        ok "sync timer active"
+    else
+        warn "sync timer" "not active"
+    fi
+
+    # sync script
+    if [ -x /usr/local/bin/mlflow-sync ]; then
+        ok "sync script installed"
+    else
+        warn "sync script" "not at /usr/local/bin/mlflow-sync"
+    fi
+}
+
+# ── Category: cache ──────────────────────────────────────────────────
+check_cache() {
+    category "cache"
+
+    # Redis/Dragonfly reachable
+    if redis-cli -h localhost ping 2>/dev/null | grep -q PONG; then
+        ok "redis/dragonfly reachable (localhost:6379)"
+    else
+        fail "redis/dragonfly" "localhost:6379 not responding (redis-cli ping failed)"
+    fi
+
+    # PRJ_DRAGONFLY_URL in env.template
+    local proj_root
+    proj_root="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel 2>/dev/null || echo "")"
+    if [[ -n "$proj_root" ]] && grep -q "PRJ_DRAGONFLY_URL" "$proj_root/env.template" 2>/dev/null; then
+        ok "PRJ_DRAGONFLY_URL in env.template"
+    elif [[ -n "$proj_root" ]]; then
+        fail "PRJ_DRAGONFLY_URL" "not found in env.template"
+    else
+        skip "PRJ_DRAGONFLY_URL in env.template" "not in a git repo"
+    fi
+
+    # PRJ_DRAGONFLY_URL set in .env
+    if [[ -n "$proj_root" ]] && [[ -f "$proj_root/.env" ]] && grep -q "PRJ_DRAGONFLY_URL" "$proj_root/.env" 2>/dev/null; then
+        ok "PRJ_DRAGONFLY_URL in .env"
+    elif [[ -n "$proj_root" ]] && [[ -f "$proj_root/.env" ]]; then
+        warn "PRJ_DRAGONFLY_URL" "not set in .env"
+    else
+        skip "PRJ_DRAGONFLY_URL in .env" ".env not found"
+    fi
+
+    # Python redis package importable
+    if python3 -c "import redis" 2>/dev/null; then
+        ok "python redis package"
+    else
+        fail "python redis package" "not importable (pip install redis)"
+    fi
+
+    # Cache module importable
+    if (cd "$proj_root" 2>/dev/null && python3 -c "from src.cache import check_cache" 2>/dev/null); then
+        ok "src.cache module"
+    else
+        fail "src.cache module" "cannot import check_cache from src.cache"
+    fi
+
+    # Context hooks importable
+    if (cd "$proj_root" 2>/dev/null && python3 -c "from src.hooks.context_manager import get_context_hooks" 2>/dev/null); then
+        ok "context_manager hooks"
+    else
+        fail "context_manager hooks" "cannot import get_context_hooks"
+    fi
+
+    # Tool chain hooks importable
+    if (cd "$proj_root" 2>/dev/null && python3 -c "from src.hooks.tool_chain import get_chain_hooks" 2>/dev/null); then
+        ok "tool_chain hooks"
+    else
+        fail "tool_chain hooks" "cannot import get_chain_hooks"
+    fi
+}
+
+# ── Category: tailscale ──────────────────────────────────────────────
+check_tailscale() {
+    category "tailscale"
+
+    # tailscale binary
+    if command -v tailscale &>/dev/null; then
+        local tv
+        tv=$(tailscale version 2>/dev/null | head -1)
+        ok "tailscale installed ($tv)"
+    else
+        warn "tailscale" "not installed"
+        return
+    fi
+
+    # tailscaled daemon
+    if pgrep -x tailscaled &>/dev/null; then
+        ok "tailscaled running"
+    else
+        warn "tailscaled" "not running"
+        return
+    fi
+
+    # authenticated
+    if tailscale status &>/dev/null; then
+        ok "tailscale authenticated"
+    else
+        warn "tailscale" "not authenticated (run: sudo tailscale up)"
+    fi
+
+    # has IP
+    local ts_ip
+    ts_ip=$(tailscale ip -4 2>/dev/null)
+    if [[ -n "$ts_ip" ]]; then
+        ok "tailscale IP ($ts_ip)"
+    else
+        warn "tailscale IP" "no IPv4 address assigned"
+    fi
+}
+
+# ── Run checks ───────────────────────────────────────────────────────
+if ! $JSON_OUT && ! $QUIET; then
+    echo -e "${BOLD}Golden WSL2 Distro Health Check${NC}"
+fi
+
+should_run "system"    && check_system
+should_run "network"   && check_network
+should_run "gpu"       && check_gpu
+should_run "tools"     && check_tools
+should_run "mcp"       && check_mcp
+should_run "services"  && check_services
+should_run "docker"    && check_docker
+should_run "tracing"   && check_tracing
+should_run "cache"     && check_cache
+should_run "tailscale" && check_tailscale
+
+# ── Output ───────────────────────────────────────────────────────────
+if $JSON_OUT; then
+    echo "{"
+    echo "  \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
+    echo "  \"clone_id\": \"$(grep '^CLONE_ID=' /etc/mlflow/clone.env 2>/dev/null | cut -d= -f2 || echo unknown)\","
+    echo "  \"pass\": $PASS_COUNT,"
+    echo "  \"fail\": $FAIL_COUNT,"
+    echo "  \"warn\": $WARN_COUNT,"
+    echo "  \"skip\": $SKIP_COUNT,"
+    echo "  \"checks\": ["
+    local first=true
+    for r in "${RESULTS[@]}"; do
+        if $first; then
+            first=false
+        else
+            echo ","
+        fi
+        echo -n "    $r"
+    done
+    echo ""
+    echo "  ]"
+    echo "}"
+else
+    echo ""
+    echo -e "${BOLD}Summary:${NC} ${GREEN}${PASS_COUNT} passed${NC}, ${RED}${FAIL_COUNT} failed${NC}, ${YELLOW}${WARN_COUNT} warnings${NC}, ${BLUE}${SKIP_COUNT} skipped${NC}"
+fi
+
+# Log failures to file
+if [[ $FAIL_COUNT -gt 0 ]]; then
+    local log_dir="/var/log"
+    if [ -w "$log_dir" ]; then
+        echo "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"failures\":$FAIL_COUNT}" >> "$log_dir/distro-health.log"
+    fi
+fi
+
+# Exit code = number of failures (capped at 125)
+exit $(( FAIL_COUNT > 125 ? 125 : FAIL_COUNT ))

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Launch MLflow UI against local SQLite store.
+# Usage: mlflow-ui [port]
+set -euo pipefail
+
+PORT="${1:-5000}"
+MLFLOW_DB="$HOME/.mlflow/mlruns.db"
+
+if ! command -v mlflow &>/dev/null; then
+    echo "ERROR: mlflow not installed" >&2
+    exit 1
+fi
+
+if [ ! -f "$MLFLOW_DB" ]; then
+    echo "WARNING: No local MLflow data yet at $MLFLOW_DB"
+    echo "         Traces will appear after running agents with setup_local_tracing()"
+fi
+
+echo "Starting MLflow UI on http://localhost:$PORT"
+echo "  Tracking URI: sqlite:///$MLFLOW_DB"
+echo "  Press Ctrl+C to stop"
+exec mlflow ui \
+    --backend-store-uri "sqlite:///$MLFLOW_DB" \
+    --host 0.0.0.0 \
+    --port "$PORT"

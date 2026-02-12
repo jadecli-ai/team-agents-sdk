@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+# Golden WSL2 performance baseline benchmark.
+#
+# Usage:
+#   distro-benchmark              # Run all benchmarks
+#   distro-benchmark --quick      # Skip long-running tests
+#
+# Writes JSON results to ~/.distro-baseline.json
+set -euo pipefail
+
+QUICK=false
+[[ "${1:-}" == "--quick" ]] && QUICK=true
+
+RESULTS_FILE="$HOME/.distro-baseline.json"
+BOLD='\033[1m'
+NC='\033[0m'
+
+echo -e "${BOLD}Golden WSL2 Distro Benchmark${NC}"
+echo ""
+
+# Collect results
+declare -A BENCH
+
+# ── CPU: sysbench ────────────────────────────────────────────────────
+if command -v sysbench &>/dev/null; then
+    echo "Running CPU benchmark (single-thread)..."
+    cpu_single=$(sysbench cpu --threads=1 --time=5 run 2>/dev/null | \
+        grep "events per second" | awk '{print $NF}')
+    BENCH[cpu_single_eps]="${cpu_single:-0}"
+
+    echo "Running CPU benchmark (multi-thread)..."
+    nproc_count=$(nproc)
+    cpu_multi=$(sysbench cpu --threads="$nproc_count" --time=5 run 2>/dev/null | \
+        grep "events per second" | awk '{print $NF}')
+    BENCH[cpu_multi_eps]="${cpu_multi:-0}"
+    BENCH[cpu_threads]="$nproc_count"
+else
+    echo "SKIP: sysbench not installed (apt install sysbench)"
+    BENCH[cpu_single_eps]="skip"
+    BENCH[cpu_multi_eps]="skip"
+fi
+
+# ── GPU: PyTorch matmul ──────────────────────────────────────────────
+if python3 -c "import torch" &>/dev/null; then
+    echo "Running GPU benchmark (PyTorch matmul 4096x4096)..."
+    gpu_ms=$(python3 -c "
+import torch, time
+if not torch.cuda.is_available():
+    print('no_cuda')
+else:
+    d = torch.device('cuda')
+    a = torch.randn(4096, 4096, device=d)
+    b = torch.randn(4096, 4096, device=d)
+    # warmup
+    for _ in range(3):
+        torch.mm(a, b)
+    torch.cuda.synchronize()
+    start = time.perf_counter()
+    for _ in range(10):
+        torch.mm(a, b)
+    torch.cuda.synchronize()
+    elapsed = (time.perf_counter() - start) / 10 * 1000
+    print(f'{elapsed:.2f}')
+" 2>/dev/null)
+    if [[ "$gpu_ms" == "no_cuda" ]]; then
+        BENCH[gpu_matmul_ms]="no_cuda"
+    else
+        BENCH[gpu_matmul_ms]="${gpu_ms:-skip}"
+    fi
+else
+    echo "SKIP: PyTorch not installed"
+    BENCH[gpu_matmul_ms]="skip"
+fi
+
+# ── Docker: cold start ───────────────────────────────────────────────
+if docker info &>/dev/null; then
+    echo "Running Docker cold start benchmark..."
+    # Remove hello-world to force pull
+    docker rmi hello-world &>/dev/null || true
+    start_time=$(date +%s%N)
+    docker run --rm hello-world &>/dev/null
+    end_time=$(date +%s%N)
+    docker_ms=$(( (end_time - start_time) / 1000000 ))
+    BENCH[docker_cold_start_ms]="$docker_ms"
+else
+    echo "SKIP: Docker not available"
+    BENCH[docker_cold_start_ms]="skip"
+fi
+
+# ── Disk: sequential write ───────────────────────────────────────────
+if ! $QUICK; then
+    echo "Running disk benchmark (1GB sequential write)..."
+    dd_output=$(dd if=/dev/zero of=/tmp/bench_write_test bs=1M count=1024 conv=fdatasync 2>&1)
+    dd_speed=$(echo "$dd_output" | tail -1 | grep -oP '[\d.]+ [MGk]?B/s' || echo "unknown")
+    rm -f /tmp/bench_write_test
+    BENCH[disk_seq_write]="$dd_speed"
+else
+    BENCH[disk_seq_write]="skip (quick mode)"
+fi
+
+# ── Network: latency ─────────────────────────────────────────────────
+echo "Running network latency benchmark..."
+gh_latency=$(curl -so /dev/null -w '%{time_total}' https://github.com 2>/dev/null || echo "0")
+gh_latency_ms=$(echo "$gh_latency * 1000" | bc 2>/dev/null | cut -d. -f1 || echo "0")
+BENCH[network_github_latency_ms]="${gh_latency_ms:-0}"
+
+# ── Write results ────────────────────────────────────────────────────
+echo ""
+echo "Writing results to $RESULTS_FILE"
+
+{
+    echo "{"
+    echo "  \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
+    echo "  \"hostname\": \"$(hostname)\","
+    echo "  \"clone_id\": \"$(grep '^CLONE_ID=' /etc/mlflow/clone.env 2>/dev/null | cut -d= -f2 || echo unknown)\","
+    first=true
+    for key in "${!BENCH[@]}"; do
+        if $first; then
+            first=false
+        else
+            echo ","
+        fi
+        val="${BENCH[$key]}"
+        # Quote non-numeric values
+        if [[ "$val" =~ ^[0-9.]+$ ]]; then
+            echo -n "  \"$key\": $val"
+        else
+            echo -n "  \"$key\": \"$val\""
+        fi
+    done
+    echo ""
+    echo "}"
+} > "$RESULTS_FILE"
+
+echo ""
+echo -e "${BOLD}Results:${NC}"
+cat "$RESULTS_FILE"
