@@ -41,7 +41,7 @@ echo -e "${BOLD}Initializing clone: $CLONE_NAME${NC}"
 echo ""
 
 # ── 1. Clone identity ───────────────────────────────────────────────
-echo -e "${BOLD}[1/12] Setting clone identity${NC}"
+echo -e "${BOLD}[1/13] Setting clone identity${NC}"
 sudo mkdir -p /etc/mlflow
 sudo tee /etc/mlflow/clone.env > /dev/null <<EOF
 CLONE_ID=$CLONE_ID
@@ -51,20 +51,20 @@ EOF
 echo "  Written /etc/mlflow/clone.env"
 
 # ── 2. Hostname ──────────────────────────────────────────────────────
-echo -e "${BOLD}[2/12] Setting hostname${NC}"
+echo -e "${BOLD}[2/13] Setting hostname${NC}"
 sudo hostnamectl set-hostname "$CLONE_NAME" 2>/dev/null || \
     echo "$CLONE_NAME" | sudo tee /etc/hostname > /dev/null
 echo "  Hostname set to $CLONE_NAME"
 
 # ── 3. Machine ID ───────────────────────────────────────────────────
-echo -e "${BOLD}[3/12] Regenerating machine-id${NC}"
+echo -e "${BOLD}[3/13] Regenerating machine-id${NC}"
 sudo rm -f /etc/machine-id /var/lib/dbus/machine-id
 sudo systemd-machine-id-setup 2>/dev/null || \
     cat /proc/sys/kernel/random/uuid | tr -d '-' | sudo tee /etc/machine-id > /dev/null
 echo "  New machine-id: $(cat /etc/machine-id | head -c 8)..."
 
 # ── 4. Neon credentials ─────────────────────────────────────────────
-echo -e "${BOLD}[4/12] Neon credentials${NC}"
+echo -e "${BOLD}[4/13] Neon credentials${NC}"
 if [ ! -f /etc/mlflow/neon.env ]; then
     sudo cp /etc/mlflow/neon.env.example /etc/mlflow/neon.env 2>/dev/null || true
     echo -e "  ${YELLOW}Edit /etc/mlflow/neon.env with your Neon connection string${NC}"
@@ -79,7 +79,7 @@ else
 fi
 
 # ── 5. Dragonfly/Redis cache ────────────────────────────────────────
-echo -e "${BOLD}[5/12] Dragonfly/Redis cache URL${NC}"
+echo -e "${BOLD}[5/13] Dragonfly/Redis cache URL${NC}"
 DRAGONFLY_ENV="/etc/mlflow/dragonfly.env"
 DRAGONFLY_DEFAULT="redis://localhost:6379/0"
 if [ -f "$DRAGONFLY_ENV" ] && grep -q "^PRJ_DRAGONFLY_URL=" "$DRAGONFLY_ENV" 2>/dev/null; then
@@ -93,7 +93,7 @@ else
 fi
 
 # ── 6. MCP config ───────────────────────────────────────────────────
-echo -e "${BOLD}[6/12] MCP configuration${NC}"
+echo -e "${BOLD}[6/13] MCP configuration${NC}"
 MCP_SRC_DIR="/usr/local/share/golden/configs/mcp"
 MCP_DEST="$HOME/.claude/.mcp.json"
 
@@ -121,7 +121,7 @@ else
 fi
 
 # ── 7. GitHub auth ──────────────────────────────────────────────────
-echo -e "${BOLD}[7/12] GitHub authentication${NC}"
+echo -e "${BOLD}[7/13] GitHub authentication${NC}"
 if gh auth status &>/dev/null; then
     echo "  Already authenticated with GitHub"
 else
@@ -135,7 +135,7 @@ else
 fi
 
 # ── 8. Clone repos ──────────────────────────────────────────────────
-echo -e "${BOLD}[8/12] Cloning org repos${NC}"
+echo -e "${BOLD}[8/13] Cloning org repos${NC}"
 if command -v gh-clone-orgs &>/dev/null; then
     read -rp "  Clone all org repos now? [Y/n] " do_repos
     if [[ "${do_repos:-Y}" =~ ^[Yy]$ ]]; then
@@ -148,7 +148,7 @@ else
 fi
 
 # ── 9. Tailscale ────────────────────────────────────────────────────
-echo -e "${BOLD}[9/12] Tailscale setup${NC}"
+echo -e "${BOLD}[9/13] Tailscale setup${NC}"
 if command -v tailscale &>/dev/null; then
     echo "  Setting Tailscale hostname to $CLONE_NAME"
     read -rp "  Start Tailscale now? [Y/n] " do_ts

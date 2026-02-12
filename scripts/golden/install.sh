@@ -35,6 +35,7 @@ run_phase() {
 # ── Phase 1: sysctl ─────────────────────────────────────────────────
 run_phase 1 "sysctl tunings"
 if [[ "$PHASE" == "all" || "$PHASE" == "1" ]]; then
+    cp "$SCRIPT_DIR/configs/wsl.conf" /etc/wsl.conf
     cp "$SCRIPT_DIR/configs/99-golden.conf" /etc/sysctl.d/99-golden.conf
     sysctl --system > /dev/null
     echo -e "  ${GREEN}sysctl tunings applied${NC}"
@@ -82,7 +83,6 @@ fi
 run_phase 5 "Install bin scripts"
 if [[ "$PHASE" == "all" || "$PHASE" == "5" ]]; then
     for script in "$SCRIPT_DIR/bin/"*; do
-        local name
         name="$(basename "$script")"
         cp "$script" "/usr/local/bin/$name"
         chmod +x "/usr/local/bin/$name"
