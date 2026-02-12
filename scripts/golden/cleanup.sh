@@ -25,7 +25,7 @@ clean() {
     if $DRY_RUN; then
         echo -e "  ${YELLOW}[dry-run]${NC} $desc"
         for target in "$@"; do
-            [ -e "$target" ] && echo "    $target"
+            [ -e "$target" ] && echo "    $target" || true
         done
     else
         echo "  $desc"
