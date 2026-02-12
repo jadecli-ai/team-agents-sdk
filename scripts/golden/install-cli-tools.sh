@@ -141,13 +141,14 @@ if should_run 2; then
     if installed cargo; then
         echo "  [cargo] Installing Rust CLI tools (this may take ~15 min on first run)..."
 
-        cargo_tools=(eza zoxide sd dust tokei procs bottom hyperfine xh tealdeer git-delta)
+        cargo_tools=(eza zoxide sd du-dust tokei procs bottom hyperfine xh tealdeer git-delta)
         for tool in "${cargo_tools[@]}"; do
             # Map cargo package name to binary name for skip check
             case "$tool" in
                 bottom)    bin="btm" ;;
                 tealdeer)  bin="tldr" ;;
                 git-delta) bin="delta" ;;
+                du-dust)   bin="dust" ;;
                 *)         bin="$tool" ;;
             esac
             if installed "$bin"; then
