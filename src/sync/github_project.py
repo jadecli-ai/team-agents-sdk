@@ -1,4 +1,13 @@
-"""Sync tasks to GitHub Issues + Projects v2 via gh CLI."""
+"""Sync tasks to GitHub Issues + Projects v2 via gh CLI.
+
+depends_on:
+  - src/get_env.py
+  - src/db/engine.py
+  - src/db/tables.py
+depended_by:
+  - scripts/sync_github.py
+semver: minor
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,12 @@
-"""Base entity with shared fields for all models."""
+"""Base entity with shared fields for all models.
+
+depends_on: []
+depended_by:
+  - src/models/task.py
+  - src/models/subtask.py
+  - src/models/agent_activity.py
+semver: major
+"""
 
 from __future__ import annotations
 

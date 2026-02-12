@@ -1,5 +1,13 @@
 """Reusable async CRUD operations for SQLAlchemy tables.
 
+depends_on:
+  - src/db/engine.py
+depended_by:
+  - src/db/__init__.py
+  - src/hooks/cost_tracker.py
+  - tests/test_crud.py
+semver: minor
+
 Usage:
     from src.db.crud import Crud
     from src.db.tables import tasks

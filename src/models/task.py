@@ -1,4 +1,15 @@
-"""Task and TaskDependency models matching semantic/tasks.yaml."""
+"""Task and TaskDependency models matching semantic/tasks.yaml.
+
+schema: tasks
+depends_on:
+  - src/models/base.py
+  - src/models/enums.py
+depended_by:
+  - src/models/__init__.py
+  - src/db/tables.py
+  - tests/test_models.py
+semver: minor
+"""
 
 from __future__ import annotations
 

@@ -1,3 +1,10 @@
+/**
+ * Dashboard home — task counts, cost summary, recent activity.
+ *
+ * @depends_on lib/db.ts, app/db/schema.ts
+ * @depended_by app/layout.tsx
+ * @semver patch
+ */
 import { db } from "@/lib/db";
 import { tasks, agentActivity } from "./db/schema";
 import { count, sum, eq, sql } from "drizzle-orm";

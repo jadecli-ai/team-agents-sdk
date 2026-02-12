@@ -1,5 +1,13 @@
 """Claude Agent SDK hooks that log agent activity to Neon Postgres.
 
+depends_on:
+  - src/db/engine.py
+  - src/db/tables.py
+depended_by:
+  - src/hooks/__init__.py
+  - tests/test_hooks.py
+semver: minor
+
 Usage:
     from src.hooks import get_activity_hooks
 

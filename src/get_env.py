@@ -3,6 +3,15 @@
 All env var access goes through this module. Values are never logged or
 included in error messages — only the key name is shown on failure.
 
+depends_on:
+  - env.template
+depended_by:
+  - src/db/engine.py
+  - src/db/alembic/env.py
+  - src/sync/github_project.py
+  - src/hooks/activity_tracker.py
+semver: major
+
 Usage:
     from src.get_env import env
 

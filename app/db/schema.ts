@@ -1,4 +1,12 @@
-// Drizzle pgTable definitions matching semantic/*.yaml
+/**
+ * Drizzle pgTable definitions matching semantic/*.yaml.
+ * GENERATED — do not hand-edit. Run `make codegen` to regenerate.
+ *
+ * @schema tasks, subtasks, task_dependencies, agent_activity
+ * @depends_on semantic/tasks.yaml, semantic/subtasks.yaml, semantic/task_dependencies.yaml, semantic/agent_activity.yaml
+ * @depended_by app/page.tsx, lib/db.ts
+ * @semver major
+ */
 import {
   pgTable,
   uuid,

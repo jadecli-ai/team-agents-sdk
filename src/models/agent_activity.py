@@ -1,4 +1,16 @@
-"""AgentActivity model matching semantic/agent_activity.yaml."""
+"""AgentActivity model matching semantic/agent_activity.yaml.
+
+schema: agent_activity
+depends_on:
+  - src/models/base.py
+  - src/models/enums.py
+depended_by:
+  - src/models/__init__.py
+  - src/db/tables.py
+  - src/hooks/activity_tracker.py
+  - tests/test_models.py
+semver: minor
+"""
 
 from __future__ import annotations
 

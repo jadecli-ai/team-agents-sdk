@@ -1,4 +1,13 @@
-"""Async SQLAlchemy engine for Neon Postgres."""
+"""Async SQLAlchemy engine for Neon Postgres.
+
+depends_on:
+  - src/get_env.py
+depended_by:
+  - src/db/crud.py
+  - src/db/__init__.py
+  - src/hooks/activity_tracker.py
+semver: major
+"""
 
 from __future__ import annotations
 

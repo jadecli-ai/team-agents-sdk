@@ -1,3 +1,10 @@
+/**
+ * Root layout — nav header and global styles.
+ *
+ * @depends_on app/globals.css
+ * @depended_by (Next.js root)
+ * @semver patch
+ */
 import type { Metadata } from "next";
 import "./globals.css";
 

@@ -1,4 +1,19 @@
-"""SQLAlchemy Table objects matching semantic YAML schemas."""
+"""SQLAlchemy Table objects matching semantic YAML schemas.
+
+schema: tasks, subtasks, task_dependencies, agent_activity
+depends_on:
+  - semantic/tasks.yaml
+  - semantic/subtasks.yaml
+  - semantic/task_dependencies.yaml
+  - semantic/agent_activity.yaml
+depended_by:
+  - src/db/crud.py
+  - src/db/__init__.py
+  - src/hooks/activity_tracker.py
+  - src/hooks/cost_tracker.py
+  - tests/test_db.py
+semver: major
+"""
 
 from __future__ import annotations
 

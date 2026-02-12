@@ -1,4 +1,13 @@
-"""Cost tracking hook: atomically updates task.actual_cost_usd from SDK ResultMessage."""
+"""Cost tracking hook: atomically updates task.actual_cost_usd from SDK ResultMessage.
+
+depends_on:
+  - src/db/crud.py
+  - src/db/tables.py
+depended_by:
+  - src/hooks/__init__.py
+  - tests/test_hooks.py
+semver: patch
+"""
 
 from __future__ import annotations
 

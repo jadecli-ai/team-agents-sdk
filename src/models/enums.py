@@ -1,4 +1,14 @@
-"""Enum definitions matching semantic/_enums.yaml."""
+"""Enum definitions matching semantic/_enums.yaml.
+
+schema: _enums
+depends_on: []
+depended_by:
+  - src/models/task.py
+  - src/models/subtask.py
+  - src/models/agent_activity.py
+  - src/db/tables.py
+semver: major
+"""
 
 from enum import Enum
 
