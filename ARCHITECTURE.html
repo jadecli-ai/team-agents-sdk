@@ -116,7 +116,7 @@
 
 <script>
 const DATA = {
-  "generated_at": "2026-02-12T03:04:20.294486+00:00",
+  "generated_at": "2026-02-12T10:32:16.277913+00:00",
   "version": "0.1.0",
   "org": "jadecli-ai",
   "repo": "team-agents-sdk",
@@ -218,6 +218,12 @@ const DATA = {
       "schema": null
     },
     {
+      "id": "semantic/mlflow_traces.yaml",
+      "layer": "schema",
+      "semver": null,
+      "schema": null
+    },
+    {
       "id": "semantic/subtasks.yaml",
       "layer": "schema",
       "semver": null,
@@ -239,6 +245,30 @@ const DATA = {
       "id": "src/__init__.py",
       "layer": "backend",
       "semver": null,
+      "schema": null
+    },
+    {
+      "id": "src/cache/__init__.py",
+      "layer": "backend",
+      "semver": "minor",
+      "schema": "n/a"
+    },
+    {
+      "id": "src/cache/compose.py",
+      "layer": "backend",
+      "semver": "minor",
+      "schema": null
+    },
+    {
+      "id": "src/cache/dragonfly_client.py",
+      "layer": "backend",
+      "semver": "minor",
+      "schema": null
+    },
+    {
+      "id": "src/cache/tool_cache.py",
+      "layer": "backend",
+      "semver": "minor",
       "schema": null
     },
     {
@@ -269,7 +299,7 @@ const DATA = {
       "id": "src/db/tables.py",
       "layer": "backend",
       "semver": "major",
-      "schema": "tasks, subtasks, task_dependencies, agent_activity"
+      "schema": "tasks, subtasks, task_dependencies, agent_activity, mlflow_traces"
     },
     {
       "id": "src/get_env.py",
@@ -280,7 +310,7 @@ const DATA = {
     {
       "id": "src/hooks/__init__.py",
       "layer": "middleware",
-      "semver": null,
+      "semver": "minor",
       "schema": null
     },
     {
@@ -290,9 +320,33 @@ const DATA = {
       "schema": null
     },
     {
+      "id": "src/hooks/context_manager.py",
+      "layer": "middleware",
+      "semver": "minor",
+      "schema": null
+    },
+    {
       "id": "src/hooks/cost_tracker.py",
       "layer": "middleware",
       "semver": "patch",
+      "schema": null
+    },
+    {
+      "id": "src/hooks/tool_chain.py",
+      "layer": "middleware",
+      "semver": "minor",
+      "schema": null
+    },
+    {
+      "id": "src/knowledge/__init__.py",
+      "layer": "backend",
+      "semver": "minor",
+      "schema": null
+    },
+    {
+      "id": "src/knowledge/ingest.py",
+      "layer": "backend",
+      "semver": "minor",
       "schema": null
     },
     {
@@ -320,6 +374,12 @@ const DATA = {
       "schema": "_enums"
     },
     {
+      "id": "src/models/mlflow_trace.py",
+      "layer": "backend",
+      "semver": "minor",
+      "schema": "mlflow_traces"
+    },
+    {
       "id": "src/models/subtask.py",
       "layer": "backend",
       "semver": "minor",
@@ -344,7 +404,19 @@ const DATA = {
       "schema": null
     },
     {
+      "id": "src/tracing/__init__.py",
+      "layer": "backend",
+      "semver": "minor",
+      "schema": "mlflow_traces"
+    },
+    {
       "id": "tests/__init__.py",
+      "layer": "test",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "tests/test_cache.py",
       "layer": "test",
       "semver": null,
       "schema": null
@@ -369,6 +441,12 @@ const DATA = {
     },
     {
       "id": "tests/test_models.py",
+      "layer": "test",
+      "semver": null,
+      "schema": null
+    },
+    {
+      "id": "tests/test_tracing.py",
       "layer": "test",
       "semver": null,
       "schema": null
@@ -458,6 +536,31 @@ const DATA = {
       "type": "import"
     },
     {
+      "source": "src/cache/dragonfly_client.py",
+      "target": "src/cache/__init__.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/cache/tool_cache.py",
+      "target": "src/cache/__init__.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/cache/compose.py",
+      "target": "src/cache/__init__.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/get_env.py",
+      "target": "src/cache/dragonfly_client.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/cache/dragonfly_client.py",
+      "target": "src/cache/tool_cache.py",
+      "type": "depends_on"
+    },
+    {
       "source": "src/db/crud.py",
       "target": "src/db/__init__.py",
       "type": "import"
@@ -523,6 +626,11 @@ const DATA = {
       "type": "depends_on"
     },
     {
+      "source": "semantic/mlflow_traces.yaml",
+      "target": "src/db/tables.py",
+      "type": "depends_on"
+    },
+    {
       "source": "env.template",
       "target": "src/get_env.py",
       "type": "depends_on"
@@ -535,12 +643,32 @@ const DATA = {
     {
       "source": "src/hooks/activity_tracker.py",
       "target": "src/hooks/__init__.py",
-      "type": "import"
+      "type": "depends_on"
     },
     {
       "source": "src/hooks/cost_tracker.py",
       "target": "src/hooks/__init__.py",
-      "type": "import"
+      "type": "depends_on"
+    },
+    {
+      "source": "src/hooks/context_manager.py",
+      "target": "src/hooks/__init__.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/hooks/tool_chain.py",
+      "target": "src/hooks/__init__.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/cache/tool_cache.py",
+      "target": "src/hooks/__init__.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/cache/compose.py",
+      "target": "src/hooks/__init__.py",
+      "type": "depends_on"
     },
     {
       "source": "src/db/engine.py",
@@ -553,6 +681,11 @@ const DATA = {
       "type": "depends_on"
     },
     {
+      "source": "src/hooks/activity_tracker.py",
+      "target": "src/hooks/context_manager.py",
+      "type": "depends_on"
+    },
+    {
       "source": "src/db/crud.py",
       "target": "src/hooks/cost_tracker.py",
       "type": "depends_on"
@@ -560,6 +693,31 @@ const DATA = {
     {
       "source": "src/db/tables.py",
       "target": "src/hooks/cost_tracker.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/hooks/activity_tracker.py",
+      "target": "src/hooks/tool_chain.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/cache/tool_cache.py",
+      "target": "src/knowledge/__init__.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/db/engine.py",
+      "target": "src/knowledge/__init__.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/cache/dragonfly_client.py",
+      "target": "src/knowledge/ingest.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/db/engine.py",
+      "target": "src/knowledge/ingest.py",
       "type": "depends_on"
     },
     {
@@ -588,6 +746,11 @@ const DATA = {
       "type": "import"
     },
     {
+      "source": "src/models/mlflow_trace.py",
+      "target": "src/models/__init__.py",
+      "type": "import"
+    },
+    {
       "source": "src/models/base.py",
       "target": "src/models/agent_activity.py",
       "type": "depends_on"
@@ -595,6 +758,11 @@ const DATA = {
     {
       "source": "src/models/enums.py",
       "target": "src/models/agent_activity.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/models/base.py",
+      "target": "src/models/mlflow_trace.py",
       "type": "depends_on"
     },
     {
@@ -638,6 +806,36 @@ const DATA = {
       "type": "import"
     },
     {
+      "source": "src/get_env.py",
+      "target": "src/tracing/__init__.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "src/cache/compose.py",
+      "target": "tests/test_cache.py",
+      "type": "import"
+    },
+    {
+      "source": "src/cache/tool_cache.py",
+      "target": "tests/test_cache.py",
+      "type": "import"
+    },
+    {
+      "source": "src/hooks/context_manager.py",
+      "target": "tests/test_cache.py",
+      "type": "import"
+    },
+    {
+      "source": "src/hooks/tool_chain.py",
+      "target": "tests/test_cache.py",
+      "type": "import"
+    },
+    {
+      "source": "src/cache/dragonfly_client.py",
+      "target": "tests/test_cache.py",
+      "type": "import"
+    },
+    {
       "source": "src/db/crud.py",
       "target": "tests/test_crud.py",
       "type": "import"
@@ -658,13 +856,38 @@ const DATA = {
       "type": "import"
     },
     {
+      "source": "src/cache/compose.py",
+      "target": "tests/test_hooks.py",
+      "type": "import"
+    },
+    {
+      "source": "src/cache/tool_cache.py",
+      "target": "tests/test_hooks.py",
+      "type": "import"
+    },
+    {
       "source": "src/hooks/activity_tracker.py",
+      "target": "tests/test_hooks.py",
+      "type": "import"
+    },
+    {
+      "source": "src/hooks/context_manager.py",
       "target": "tests/test_hooks.py",
       "type": "import"
     },
     {
       "source": "src/hooks/cost_tracker.py",
       "target": "tests/test_hooks.py",
+      "type": "import"
+    },
+    {
+      "source": "src/hooks/tool_chain.py",
+      "target": "tests/test_hooks.py",
+      "type": "import"
+    },
+    {
+      "source": "src/models/mlflow_trace.py",
+      "target": "tests/test_tracing.py",
       "type": "import"
     }
   ],
@@ -688,14 +911,14 @@ const DATA = {
     "ci"
   ],
   "stats": {
-    "total_files": 42,
-    "total_edges": 54,
+    "total_files": 55,
+    "total_edges": 83,
     "by_layer": {
-      "schema": 5,
-      "backend": 13,
-      "middleware": 5,
+      "schema": 6,
+      "backend": 21,
+      "middleware": 7,
       "frontend": 4,
-      "test": 5,
+      "test": 7,
       "infra": 4,
       "ci": 6
     }
